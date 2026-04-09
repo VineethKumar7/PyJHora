@@ -112,7 +112,7 @@ Since I could not find algorithmic details I have used CoPilot to calculate this
 * Added `jhora.horoscope.dhasa.raasi.chathuvidha_utthara` dhasa with four methods (Lagna, Kendra, Trikona and Dasha).
 * Eclipse module has been updated. Option given to show maximum eclipse location. Requires `import reverse_geocode`.
 * Added Nakshathra Dhasa Progression to graha dhasas as `nakshathra_dhasa_progression`. Also added an argument `dhasa_progression_correction` to every planet, subplanet, special lagna calculations. Added this as an option in the `horo_chart_tabs` UI. 
-* Added `utils.get_running_dhasa_at_all_levels_for_given_date` function to get running dhasa for given julian day number and dhasa_periods (obtained from any dhasa calculations at DEHA Level). Added this as right click menu on the dhasa bhukthi tab of `horo_chart_tabs` UI.
+* Added 2 functions to each dhasa `xxxx_immediate_children` to get immediate child level dhasa for a given parent dhasa, and `get_running_dhasa_for_given_date` function to get running dhasa for given julian day number and dhasa_periods. Added this as right click menu on the dhasa bhukthi tab of `horo_chart_tabs` UI.
 * Added `house.order_of_raasis_by_strength` function. 
 * removed global variables _ayanamsa_mode and _ayanamsa_value and set_ayanamsa_mode and reset_ayanamsa_mode that were repeatedly called were also removed - as requested by a user.
 * few minor fixes to yoga.py
