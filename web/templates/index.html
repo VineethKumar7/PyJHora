@@ -187,15 +187,17 @@ async function loadChart() {
 
   const g = document.getElementById('chartGrid');
   g.innerHTML = '';
-  // 4x4 grid layout with the 12 houses placed around the border
-  // Positions (row,col) for signs 0..11 in a standard North-Indian-style 4x4:
+  // South-Indian style: signs are FIXED in a 4x4 border, clockwise from Aries at top
+  //   Pisces  | Aries  | Taurus | Gemini
+  //   Aquar.  |         inner       | Cancer
+  //   Capric. |         inner       | Leo
+  //   Sagit.  | Scorpio| Libra  | Virgo
+  // Positions (row,col) for signs 0..11 (Aries..Pisces):
   const POSITIONS = [
-    [0,1],[0,0],[1,0],[2,0],
-    [3,0],[3,1],[3,2],[3,3],
-    [2,3],[1,3],[0,3],[0,2],
+    [0,1], [0,2], [0,3], [1,3],  // 0 Aries, 1 Taurus, 2 Gemini, 3 Cancer
+    [2,3], [3,3], [3,2], [3,1],  // 4 Leo,   5 Virgo,  6 Libra,  7 Scorpio
+    [3,0], [2,0], [1,0], [0,0],  // 8 Sag,   9 Capric, 10 Aquar, 11 Pisces
   ];
-  // We'll put sign i at POSITIONS[(i + offset) % 12] so asc is top-left-ish.
-  // For simplicity, keep signs in fixed slots (Aries top-second, etc.)
   const cells = Array.from({length:16},()=>null);
   d.houses.forEach((h, idx) => {
     const [r,c] = POSITIONS[idx];
