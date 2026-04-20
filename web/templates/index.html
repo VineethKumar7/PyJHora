@@ -191,7 +191,10 @@
           <span id="lifeZoomVal" class="text-slate-400">2.5×</span>
           <span class="text-slate-400">· scroll horizontally to pan</span>
         </div>
-        <div id="lifeChartSvg" class="overflow-x-auto border border-slate-100 rounded"></div>
+        <div id="lifeChartSvg" class="relative overflow-x-auto border border-slate-100 rounded">
+          <div id="lifeChartTooltip" class="hidden absolute top-1 right-2 pointer-events-none bg-slate-800 text-white text-xs rounded px-2 py-1 shadow"></div>
+          <div id="lifeChartCursor" class="hidden absolute top-0 pointer-events-none border-l border-slate-400/70" style="height:100%"></div>
+        </div>
         <p class="text-xs text-slate-400 mt-3">Simplified rule engine (~25 rules), inspired by VedAstro. Dasha-based colouring at 30-day resolution.</p>
       </div>
 
@@ -443,6 +446,8 @@ document.getElementById('bhavaButton').addEventListener('click', loadBhava);
 document.getElementById('dashaButton').addEventListener('click', loadDasha);
 document.getElementById('lifeChartButton').addEventListener('click', loadLifeChart);
 
+let lifeChartState = { slices: [], sliceDays: 30, labels: [], svgBaseW: 1000 };
+
 function applyLifeZoom() {
   const z = parseFloat(document.getElementById('lifeZoom').value) || 1;
   document.getElementById('lifeZoomVal').textContent = z.toFixed(2).replace(/\.?0+$/, '') + '×';
@@ -450,11 +455,59 @@ function applyLifeZoom() {
   if (!svg) return;
   const vb = (svg.getAttribute('viewBox') || '0 0 1000 156').split(/\s+/).map(Number);
   const baseW = vb[2] || 1000, baseH = vb[3] || 156;
-  const w = Math.round(baseW * z);
-  const h = Math.round(baseH * z);
-  svg.setAttribute('width', w);
-  svg.setAttribute('height', h);
+  lifeChartState.svgBaseW = baseW;
+  svg.setAttribute('width', Math.round(baseW * z));
+  svg.setAttribute('height', Math.round(baseH * z));
   svg.style.display = 'block';
+}
+
+function formatDate(d) {
+  return d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+
+function lifeChartMouseMove(e) {
+  const container = document.getElementById('lifeChartSvg');
+  const svg = container.querySelector('svg');
+  const tip = document.getElementById('lifeChartTooltip');
+  const cur = document.getElementById('lifeChartCursor');
+  if (!svg) return;
+  const rect = svg.getBoundingClientRect();
+  const xInSvg = e.clientX - rect.left; // already scaled
+  const z = rect.width / lifeChartState.svgBaseW;
+  const svgX = xInSvg / z;  // in viewBox units
+  const leftPad = parseFloat(svg.dataset.leftPad || '70');
+  const plotW = parseFloat(svg.dataset.plotW || '918');
+  const totalDays = parseFloat(svg.dataset.totalDays || '36525');
+  const birthStr = svg.dataset.birthDate;
+  if (!birthStr) return;
+  let frac = (svgX - leftPad) / plotW;
+  frac = Math.max(0, Math.min(1, frac));
+  const dayOffset = frac * totalDays;
+  const birth = new Date(birthStr + 'T00:00:00Z');
+  const at = new Date(birth.getTime() + dayOffset * 86400000);
+  const ageYears = dayOffset / 365.25;
+  const sliceIdx = Math.min(lifeChartState.slices.length - 1,
+    Math.max(0, Math.floor(dayOffset / lifeChartState.sliceDays)));
+  const s = lifeChartState.slices[sliceIdx] || [];
+  const L = lifeChartState.labels;
+  const md = s[0] != null ? L[s[0]] : '?';
+  const ad = s[1] != null ? L[s[1]] : '?';
+  const mScore = s[2] != null ? s[2] : 0;
+  const cScore = s[3] != null ? s[3] : 0;
+  const dateStr = formatDate(at);
+  tip.innerHTML = `<div class="font-semibold">${dateStr} · age ${ageYears.toFixed(1)}</div>` +
+                  `<div>MD: ${md} / AD: ${ad}</div>` +
+                  `<div>Marriage: ${mScore >= 0 ? '+' : ''}${mScore}  ·  Career: ${cScore >= 0 ? '+' : ''}${cScore}</div>`;
+  tip.classList.remove('hidden');
+  cur.style.left = (e.clientX - container.getBoundingClientRect().left + container.scrollLeft) + 'px';
+  cur.classList.remove('hidden');
+}
+
+function lifeChartMouseLeave() {
+  document.getElementById('lifeChartTooltip').classList.add('hidden');
+  document.getElementById('lifeChartCursor').classList.add('hidden');
 }
 
 async function loadLifeChart() {
@@ -468,7 +521,14 @@ async function loadLifeChart() {
     if (!r.ok) { showErr('Life chart failed: '+r.status); return; }
     const d = await r.json();
     document.getElementById('lifeChartSubject').textContent = subjectLine(fd);
-    document.getElementById('lifeChartSvg').innerHTML = d.svg;
+    const holder = document.getElementById('lifeChartSvg');
+    holder.innerHTML =
+      '<div id="lifeChartTooltip" class="hidden absolute top-1 right-2 pointer-events-none bg-slate-800 text-white text-xs rounded px-2 py-1 shadow z-10"></div>' +
+      '<div id="lifeChartCursor" class="hidden absolute top-0 pointer-events-none border-l border-slate-500/60" style="height:100%"></div>' +
+      d.svg;
+    lifeChartState.slices = d.slices || [];
+    lifeChartState.sliceDays = d.slice_days || 30;
+    lifeChartState.labels = d.planet_labels || [];
     document.getElementById('lifeChartOut').classList.remove('hidden');
     applyLifeZoom();
   } finally {
@@ -488,6 +548,8 @@ document.getElementById('lifeZoomOut').addEventListener('click', () => {
   s.value = Math.max(parseFloat(s.min), parseFloat(s.value) - parseFloat(s.step));
   applyLifeZoom();
 });
+document.getElementById('lifeChartSvg').addEventListener('mousemove', lifeChartMouseMove);
+document.getElementById('lifeChartSvg').addEventListener('mouseleave', lifeChartMouseLeave);
 populateVargaOptions();
 populateAyanamsaOptions();
 

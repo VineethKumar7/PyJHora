@@ -411,7 +411,17 @@ async def life_chart_endpoint(
     timeline = life_chart.build_timeline(jd, place, years=years, slice_days=slice_days)
     subject = f"{name or 'Subject'} · {date} {time}"
     svg = life_chart.render_svg(timeline, subject=subject)
-    return JSONResponse({"svg": svg, "slices": len(timeline["slices"])})
+    compact = [
+        [s["md"], s["ad"], s["marriage"], s["career"]]
+        for s in timeline["slices"]
+    ]
+    return JSONResponse({
+        "svg": svg,
+        "slice_count": len(timeline["slices"]),
+        "slice_days": slice_days,
+        "slices": compact,
+        "planet_labels": ["Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn", "Rahu", "Ketu"],
+    })
 
 
 @app.get("/api/autosave")

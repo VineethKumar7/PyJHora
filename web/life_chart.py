@@ -311,9 +311,15 @@ def render_svg(timeline: dict, subject: str = "") -> str:
     def x_for(jd_val: float) -> float:
         return left_pad + (jd_val - start_jd) / total_days * plot_w
 
+    birth_y0, birth_m0, birth_d0, _ = utils.jd_to_gregorian(start_jd)
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
-        f'font-family="system-ui,sans-serif" font-size="11">',
+        f'font-family="system-ui,sans-serif" font-size="11" '
+        f'data-left-pad="{left_pad}" data-plot-w="{plot_w}" '
+        f'data-total-days="{total_days:.4f}" '
+        f'data-birth-date="{birth_y0:04d}-{birth_m0:02d}-{birth_d0:02d}" '
+        f'data-row-top-pad="{top_pad}" data-row-h="{row_h}" data-row-gap="{row_gap}" '
+        f'data-content-h="{top_pad + len(rows) * (row_h + row_gap)}">',
         f'<text x="{left_pad}" y="16" font-size="13" font-weight="600" fill="#334155">'
         f'Life Chart{(" · " + subject) if subject else ""}</text>',
     ]
