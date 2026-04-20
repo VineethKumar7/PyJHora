@@ -1402,19 +1402,28 @@ function showAppView() {
   if (nav) nav.textContent = subj;
 }
 
-document.getElementById('enterButton').addEventListener('click', async () => {
-  const fd = ensureForm();
-  if (!fd) return;
+const LAST_VIEW_KEY = 'pyjhora_last_view';
+
+function enterApp() {
   showAppView();
-  // Default tab on first entry: Bhava. On subsequent re-entries, preserve.
   const anyVisible = TABS.some(t => !document.getElementById(t.panel).classList.contains('hidden'));
   const defaultBtn = anyVisible
     ? TABS.find(t => !document.getElementById(t.panel).classList.contains('hidden'))
     : TABS.find(t => t.id === 'bhavaButton');
   document.getElementById(defaultBtn.id).click();
+  try { localStorage.setItem(LAST_VIEW_KEY, 'app'); } catch (e) {}
+}
+
+document.getElementById('enterButton').addEventListener('click', () => {
+  const fd = ensureForm();
+  if (!fd) return;
+  enterApp();
 });
 loginBackBtn.addEventListener('click', () => { showAppView(); });
-document.getElementById('editProfileButton').addEventListener('click', () => showLoginView(true));
+document.getElementById('editProfileButton').addEventListener('click', () => {
+  showLoginView(true);
+  try { localStorage.setItem(LAST_VIEW_KEY, 'login'); } catch (e) {}
+});
 
 // Attach autosave to every form field and the city input
 document.getElementById('form').addEventListener('input', scheduleAutosave);
@@ -1428,6 +1437,11 @@ cityInput.addEventListener('input', scheduleAutosave);
     document.querySelector('input[name=date]').value = today.toISOString().slice(0,10);
   }
   await refreshProfileList();
+  let lastView = null;
+  try { lastView = localStorage.getItem(LAST_VIEW_KEY); } catch (e) {}
+  if (restored && lastView === 'app') {
+    enterApp();
+  }
 })();
 </script>
 </body>
