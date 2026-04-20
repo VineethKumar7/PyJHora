@@ -325,6 +325,7 @@ async function loadBhava() {
 
 async function loadDasha() {
   const fd = ensureForm(); if (!fd) return;
+  fd.set('level', '2');
   const r = await fetch('/api/dasha', { method:'POST', body: fd });
   if (!r.ok) { showErr('Dasha failed: '+r.status); return; }
   const d = await r.json();
@@ -335,13 +336,42 @@ async function loadDasha() {
   const tbody = document.getElementById('dashaBody');
   tbody.innerHTML = '';
   d.periods.forEach((p, i) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML =
+    const hasAD = Array.isArray(p.antardashas) && p.antardashas.length > 0;
+    const mdRow = document.createElement('tr');
+    mdRow.className = hasAD ? 'cursor-pointer hover:bg-slate-50' : '';
+    const caret = hasAD ? '<span class="inline-block w-3 text-slate-400 caret">▶</span> ' : '<span class="inline-block w-3"></span> ';
+    mdRow.innerHTML =
       '<td class="py-2 pr-3 text-slate-400">'+(i+1)+'</td>'+
-      '<td class="py-2 pr-3 font-medium text-slate-800">'+p.lord+'</td>'+
+      '<td class="py-2 pr-3 font-medium text-slate-800">'+caret+p.lord+'</td>'+
       '<td class="py-2 pr-3 text-slate-600">'+p.start+'</td>'+
       '<td class="py-2 text-slate-700">'+p.duration_years+'</td>';
-    tbody.appendChild(tr);
+    tbody.appendChild(mdRow);
+    if (hasAD) {
+      const childRow = document.createElement('tr');
+      childRow.className = 'hidden bg-slate-50';
+      const td = document.createElement('td');
+      td.colSpan = 4;
+      td.className = 'py-2 pl-8 pr-3';
+      let inner = '<div class="text-xs text-slate-500 mb-1">Antardasha (sub-periods)</div>'+
+        '<table class="w-full text-xs"><thead><tr class="text-left text-slate-400 border-b">'+
+        '<th class="py-1 pr-3">#</th><th class="py-1 pr-3">Lord</th>'+
+        '<th class="py-1 pr-3">Start</th><th class="py-1">Duration (years)</th></tr></thead><tbody>';
+      p.antardashas.forEach((ad, j) => {
+        inner += '<tr><td class="py-1 pr-3 text-slate-400">'+(j+1)+'</td>'+
+          '<td class="py-1 pr-3 text-slate-700">'+ad.lord+'</td>'+
+          '<td class="py-1 pr-3 text-slate-600">'+ad.start+'</td>'+
+          '<td class="py-1 text-slate-700">'+ad.duration_years+'</td></tr>';
+      });
+      inner += '</tbody></table>';
+      td.innerHTML = inner;
+      childRow.appendChild(td);
+      tbody.appendChild(childRow);
+      mdRow.addEventListener('click', () => {
+        childRow.classList.toggle('hidden');
+        const c = mdRow.querySelector('.caret');
+        if (c) c.textContent = childRow.classList.contains('hidden') ? '▶' : '▼';
+      });
+    }
   });
   document.getElementById('dashaOut').classList.remove('hidden');
 }

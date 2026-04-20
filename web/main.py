@@ -348,22 +348,37 @@ async def dasha(
     _apply_ayanamsa(ayanamsa)
     place, jd, _, _ = _make_place_and_jd(date, time, latitude, longitude, timezone)
     level = max(1, min(int(level), 2))
-    vim = vimsottari.get_vimsottari_dhasa_bhukthi(jd, place, dhasa_level_index=level)
-    balance = vim[0]
+    md_result = vimsottari.get_vimsottari_dhasa_bhukthi(jd, place, dhasa_level_index=1)
+    balance = md_result[0]
     balance_years = balance[0] + balance[1] / 12.0 + balance[2] / 365.25
 
+    ad_by_md = {}
+    if level >= 2:
+        ad_result = vimsottari.get_vimsottari_dhasa_bhukthi(jd, place, dhasa_level_index=2)
+        for entry in ad_result[1]:
+            lords = entry[0]
+            md_lord = lords[0]
+            ad_by_md.setdefault(md_lord, []).append({
+                "lord": _token_to_name(lords[1]),
+                "lord_id": lords[1],
+                "start": _fmt_dasha_date(entry[1]),
+                "duration_years": round(entry[2], 4),
+            })
+
     periods = []
-    for entry in vim[1]:
+    for entry in md_result[1]:
         lords = entry[0]
-        start_tuple = entry[1]
-        dur_years = entry[2]
+        md_lord = lords[0]
         lord_names = [_token_to_name(l) for l in lords]
-        periods.append({
+        row = {
             "lord": " / ".join(lord_names),
             "lord_ids": list(lords),
-            "start": _fmt_dasha_date(start_tuple),
-            "duration_years": round(dur_years, 3),
-        })
+            "start": _fmt_dasha_date(entry[1]),
+            "duration_years": round(entry[2], 3),
+        }
+        if level >= 2:
+            row["antardashas"] = ad_by_md.get(md_lord, [])
+        periods.append(row)
     return JSONResponse({
         "level": level,
         "balance": {
