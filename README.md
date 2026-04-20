@@ -1,22 +1,41 @@
-JHora 4.8.0
-=================
-Python package containing almost all the features described in the book
+PyJHora (fork)
+==============
 
-`Vedic Astrology - An Integrated Approach - by PVR Narasimha Rao`
+> **This repository is a fork of [naturalstupid/PyJHora](https://github.com/naturalstupid/PyJHora)**
+> maintained by [VineethKumar7](https://github.com/VineethKumar7). The upstream
+> project is the work of the original author, and all core astrology logic
+> originates from there. Please ⭐ and cite the upstream repo first.
+>
+> **What this fork adds**
+> - A FastAPI + Tailwind web UI under [`web/`](./web) (Panchangam, Rasi, Bhava,
+>   Vimshottari Dasha drill-down to Sookshmadasha, Life Chart with gochara and
+>   a zoomable timeline).
+> - No changes to the published `jhora` Python package surface — existing
+>   imports and tests continue to work unchanged.
+>
+> **Licensing** — This fork is distributed under the same
+> [GNU Affero General Public License v3.0](./LICENSE) as the upstream project.
+> Per AGPL, any modified version served over a network must provide the
+> corresponding source to its users; the web UI in this repo satisfies that
+> requirement for its own modifications.
+
+---
+
+Python package containing almost all the features described in the book
+**Vedic Astrology — An Integrated Approach** by *P. V. R. Narasimha Rao*
+(free PDF: [vedicastrologer.org/articles/vedic_astro_textbook.pdf](https://www.vedicastrologer.org/articles/vedic_astro_textbook.pdf))
+
 ![Vedic Astrology - An Integrated Approach by PVR Narasimha Rao](./src/jhora/images/pvr_ebook.jpg)
 
-and 
-
-the free astrology software `Jagannatha Hora V8.0 software` by the same author.
-
+and the free astrology software **Jagannatha Hora V8.0** by the same author.
 
  ![Jagannatha Hora V8.0 software](./src/jhora/images/jhora_pvr.jpg)
 
-This python library was inspired by his book and software. Almost all the results have been verified against the examples and exercises provided in the book. Also the features that are outside of his book but in his JHora software were collected from various internet sources and have been verified closest to results obtained using JHora software. 
+This python library was inspired by his book and software. Almost all the results have been verified against the examples and exercises provided in the book. Also the features that are outside of his book but in his JHora software were collected from various internet sources and have been verified closest to results obtained using JHora software.
 
 There is a test module (`jhora.tests.pvr_tests`) containing about 6800 tests that can be run to verify the same. Please note the tests assume `const._DEFAULT_AYANAMSA_MODE='LAHIRI'`.
 
-Having said that, if you find this package useful, all the credits go to Shri. P.V.R Narasimha Rao for such a wonderful book and the software and to the other internet sources.
+Having said that, if you find this package useful, all the credits go to Shri. P.V.R Narasimha Rao for such a wonderful book and the software, to the upstream maintainer [naturalstupid](https://github.com/naturalstupid), and to the other internet sources.
 
 Installation Requirements
 -------------------------

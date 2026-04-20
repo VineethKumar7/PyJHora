@@ -14,3 +14,4 @@ __pycache__/
 .env
 web/data/
 *.db
+docs/references/
