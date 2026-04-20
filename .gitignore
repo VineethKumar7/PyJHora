@@ -8,3 +8,7 @@ src/jhora/horoscope/prediction/marriage.py
 /src/jhora/experiments
 src/.settings/org.eclipse.core.resources.prefs
 src/.settings/org.eclipse.core.resources.prefs
+venv/
+__pycache__/
+.DS_Store
+.env

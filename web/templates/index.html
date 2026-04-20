@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>PyJHora — Vedic Astrology</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .chakra { aspect-ratio: 1/1; }
+  .chakra-cell {
+    border: 1px solid #d1d5db;
+    padding: 6px;
+    font-size: 11px;
+    min-height: 80px;
+    background: #fafaf9;
+  }
+  .chakra-cell.asc { background: #fef3c7; border-color: #f59e0b; }
+  .planet { display: inline-block; margin-right: 4px; font-weight: 500; }
+  .asc-badge { color: #b45309; font-weight: 700; }
+</style>
+</head>
+<body class="bg-slate-50 min-h-screen">
+<div class="max-w-6xl mx-auto p-6">
+  <header class="mb-6">
+    <h1 class="text-3xl font-bold text-slate-800">🔯 PyJHora Web</h1>
+    <p class="text-slate-500 text-sm">Vedic astrology — panchangam &amp; rasi chart, powered by PyJHora</p>
+  </header>
+
+  <div class="grid md:grid-cols-3 gap-6">
+    <!-- Form -->
+    <form id="form" class="md:col-span-1 bg-white rounded-lg shadow p-5 space-y-4">
+      <h2 class="font-semibold text-slate-700 border-b pb-2">Birth / Event Details</h2>
+      <div>
+        <label class="block text-sm text-slate-600 mb-1">Name</label>
+        <input type="text" name="name" placeholder="e.g. Vineeth" class="w-full border rounded px-3 py-2"/>
+      </div>
+      <div>
+        <label class="block text-sm text-slate-600 mb-1">Gender</label>
+        <select name="gender" class="w-full border rounded px-3 py-2 bg-white">
+          <option value="">—</option>
+          <option value="male">Male</option>
+          <option value="female">Female</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm text-slate-600 mb-1">Date of Birth</label>
+        <input type="date" name="date" required class="w-full border rounded px-3 py-2"/>
+      </div>
+      <div>
+        <label class="block text-sm text-slate-600 mb-1">Time of Birth</label>
+        <input type="time" name="time" value="12:00" required class="w-full border rounded px-3 py-2"/>
+      </div>
+      <div class="relative">
+        <label class="block text-sm text-slate-600 mb-1">City / Place</label>
+        <input type="text" id="cityInput" autocomplete="off" placeholder="Type a city, e.g. Coimbatore"
+               class="w-full border rounded px-3 py-2"/>
+        <ul id="citySuggest"
+            class="hidden absolute left-0 right-0 top-full z-10 bg-white border border-slate-200 rounded mt-1 shadow-lg max-h-72 overflow-auto"></ul>
+        <p id="tzInfo" class="text-xs text-slate-500 mt-1"></p>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <div>
+          <label class="block text-[11px] text-slate-500 mb-1">Latitude</label>
+          <input type="number" step="0.0001" name="latitude" value="50.3569" class="w-full border rounded px-2 py-1 text-sm"/>
+        </div>
+        <div>
+          <label class="block text-[11px] text-slate-500 mb-1">Longitude</label>
+          <input type="number" step="0.0001" name="longitude" value="7.5890" class="w-full border rounded px-2 py-1 text-sm"/>
+        </div>
+        <div>
+          <label class="block text-[11px] text-slate-500 mb-1">UTC&nbsp;±</label>
+          <input type="number" step="0.25" name="timezone" value="1.0" class="w-full border rounded px-2 py-1 text-sm"/>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <button type="button" id="panchButton" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded py-2 font-medium">Panchangam</button>
+        <button type="button" id="chartButton" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded py-2 font-medium">Rasi Chart</button>
+      </div>
+      <p class="text-xs text-slate-400">Default: Koblenz, Germany</p>
+    </form>
+
+    <!-- Results -->
+    <div class="md:col-span-2 space-y-5">
+      <div id="panchOut" class="hidden bg-white rounded-lg shadow p-5">
+        <div class="flex items-baseline justify-between border-b pb-2 mb-3">
+          <h2 class="font-semibold text-slate-700">Panchangam</h2>
+          <span id="panchSubject" class="text-xs text-slate-500"></span>
+        </div>
+        <div id="panchGrid" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div>
+      </div>
+
+      <div id="chartOut" class="hidden bg-white rounded-lg shadow p-5">
+        <div class="flex items-baseline justify-between border-b pb-2 mb-3">
+          <h2 class="font-semibold text-slate-700">Rasi Chart</h2>
+          <span id="chartSubject" class="text-xs text-slate-500"></span>
+        </div>
+        <p id="ascLine" class="text-sm text-slate-600 mb-3"></p>
+        <div id="chartGrid" class="chakra grid grid-cols-4 grid-rows-4 gap-0 max-w-xl"></div>
+      </div>
+
+      <div id="errOut" class="hidden bg-red-50 border border-red-300 text-red-700 rounded p-3 text-sm"></div>
+    </div>
+  </div>
+
+  <footer class="text-center text-xs text-slate-400 mt-8">
+    PyJHora by <a href="https://github.com/naturalstupid/PyJHora" class="underline">naturalstupid</a> · book:
+    <em>Vedic Astrology — An Integrated Approach</em> by P.V.R. Narasimha Rao
+  </footer>
+</div>
+
+<script>
+// North-Indian-style 4x4 layout mapping signs 0-11 to grid positions.
+// Ascendant house goes top-center; clockwise houses 2..12.
+// Grid positions (0-indexed in a 4x4) for houses 1..12:
+const HOUSE_GRID_POS = [
+  {r:0,c:1,cs:2}, // 1 asc top-center (spans 2)
+  {r:0,c:3},      // 2
+  {r:1,c:3},      // 3
+  {r:1,c:2,cs:2,rs:2, merge:true}, // center block (we skip)
+  {r:2,c:3},      // 4
+  {r:3,c:3},      // 5 (will map)
+];
+// Simpler: use 4x4 grid as: row 0 (cells 0..3), row 1 (0,1,2,3) — center 4 cells are inner.
+// For simplicity, render as a 4x4 grid of all 12 houses around the border,
+// placing the inner 4 cells blank. We'll use a simpler 4x3 layout.
+
+const SIGN_GLYPH = ['♈','♉','♊','♋','♌','♍','♎','♏','♐','♑','♒','♓'];
+
+function ensureForm() {
+  const fd = new FormData(document.getElementById('form'));
+  const err = document.getElementById('errOut');
+  if (!fd.get('date')) { err.textContent='Please pick a date.'; err.classList.remove('hidden'); return null; }
+  err.classList.add('hidden');
+  return fd;
+}
+
+function subjectLine(fd) {
+  const name = (fd.get('name')||'').trim();
+  const gender = fd.get('gender')||'';
+  const date = fd.get('date')||'';
+  const time = fd.get('time')||'';
+  const city = (document.getElementById('cityInput').value||'').trim();
+  const parts = [];
+  if (name) parts.push(name + (gender?' ('+gender+')':''));
+  if (date||time) parts.push(date + (time?' '+time:''));
+  if (city) parts.push(city);
+  return parts.join(' · ');
+}
+
+async function loadPanchangam() {
+  const fd = ensureForm(); if (!fd) return;
+  const r = await fetch('/api/panchangam', { method:'POST', body: fd });
+  if (!r.ok) { showErr('Panchangam failed: '+r.status); return; }
+  const d = await r.json();
+  document.getElementById('panchSubject').textContent = subjectLine(fd);
+  const g = document.getElementById('panchGrid');
+  g.innerHTML = '';
+  const items = [
+    ['Vaara (Day)', d.vaara.name],
+    ['Tithi', d.tithi.name + ' (#' + d.tithi.number + ')'],
+    ['Nakshatra', d.nakshatra.name + ' pada ' + d.nakshatra.pada],
+    ['Yoga', d.yoga.name],
+    ['Karana', d.karana.name],
+    ['Sunrise', d.sunrise],
+    ['Sunset', d.sunset],
+    ['Moonrise', d.moonrise],
+    ['Moonset', d.moonset],
+  ];
+  items.forEach(([k,v]) => {
+    const el = document.createElement('div');
+    el.className = 'bg-slate-50 rounded p-3 border border-slate-200';
+    el.innerHTML = '<div class="text-xs text-slate-500">'+k+'</div><div class="font-medium text-slate-800 mt-1">'+v+'</div>';
+    g.appendChild(el);
+  });
+  document.getElementById('panchOut').classList.remove('hidden');
+}
+
+async function loadChart() {
+  const fd = ensureForm(); if (!fd) return;
+  const r = await fetch('/api/chart', { method:'POST', body: fd });
+  if (!r.ok) { showErr('Chart failed: '+r.status); return; }
+  const d = await r.json();
+  document.getElementById('chartSubject').textContent = subjectLine(fd);
+  document.getElementById('ascLine').textContent =
+    'Ascendant: ' + (d.ascendant_sign_name || '?');
+
+  const g = document.getElementById('chartGrid');
+  g.innerHTML = '';
+  // 4x4 grid layout with the 12 houses placed around the border
+  // Positions (row,col) for signs 0..11 in a standard North-Indian-style 4x4:
+  const POSITIONS = [
+    [0,1],[0,0],[1,0],[2,0],
+    [3,0],[3,1],[3,2],[3,3],
+    [2,3],[1,3],[0,3],[0,2],
+  ];
+  // We'll put sign i at POSITIONS[(i + offset) % 12] so asc is top-left-ish.
+  // For simplicity, keep signs in fixed slots (Aries top-second, etc.)
+  const cells = Array.from({length:16},()=>null);
+  d.houses.forEach((h, idx) => {
+    const [r,c] = POSITIONS[idx];
+    cells[r*4+c] = h;
+  });
+  for (let i=0; i<16; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'chakra-cell';
+    const h = cells[i];
+    if (!h) { cell.style.background='transparent'; cell.style.border='none'; g.appendChild(cell); continue; }
+    const isAsc = h.sign_index === d.ascendant_sign;
+    if (isAsc) cell.classList.add('asc');
+    const planets = h.planets.map(p =>
+      '<span class="planet'+(p.is_asc?' asc-badge':'')+'">'+p.name+'</span>'
+    ).join('');
+    cell.innerHTML =
+      '<div class="text-slate-500">'+SIGN_GLYPH[h.sign_index]+' '+h.sign.replace(/[^A-Za-z]/g,'')+'</div>'+
+      '<div class="mt-1">'+planets+'</div>';
+    g.appendChild(cell);
+  }
+  document.getElementById('chartOut').classList.remove('hidden');
+}
+
+function showErr(msg) {
+  const err = document.getElementById('errOut');
+  err.textContent = msg; err.classList.remove('hidden');
+}
+
+document.getElementById('panchButton').addEventListener('click', loadPanchangam);
+document.getElementById('chartButton').addEventListener('click', loadChart);
+
+// --- City autocomplete ---
+const cityInput = document.getElementById('cityInput');
+const citySuggest = document.getElementById('citySuggest');
+const tzInfo = document.getElementById('tzInfo');
+let cityDebounce = null;
+let lastQuery = '';
+
+async function fetchCities(q) {
+  if (!q || q.length < 2) { hideSuggest(); return; }
+  try {
+    const r = await fetch('/api/geocode?q=' + encodeURIComponent(q));
+    if (!r.ok) { hideSuggest(); return; }
+    const data = await r.json();
+    renderSuggest(data.results || []);
+  } catch (_) { hideSuggest(); }
+}
+
+function renderSuggest(rows) {
+  if (!rows.length) { hideSuggest(); return; }
+  citySuggest.innerHTML = '';
+  rows.forEach(row => {
+    const li = document.createElement('li');
+    li.className = 'px-3 py-2 cursor-pointer hover:bg-indigo-50 text-sm border-b border-slate-100 last:border-b-0';
+    li.innerHTML =
+      '<div class="font-medium text-slate-800">'+escapeHtml(row.short)+'</div>'+
+      '<div class="text-xs text-slate-500">'+escapeHtml(row.label)+'</div>'+
+      '<div class="text-[11px] text-slate-400 mt-0.5">'+row.lat+', '+row.lon+' · '+
+      (row.timezone_name||'?')+' (UTC'+(row.timezone_offset>=0?'+':'')+row.timezone_offset+')</div>';
+    li.addEventListener('click', () => pickCity(row));
+    citySuggest.appendChild(li);
+  });
+  citySuggest.classList.remove('hidden');
+}
+
+function hideSuggest() { citySuggest.classList.add('hidden'); }
+
+function pickCity(row) {
+  document.querySelector('input[name=latitude]').value  = row.lat;
+  document.querySelector('input[name=longitude]').value = row.lon;
+  document.querySelector('input[name=timezone]').value  = row.timezone_offset;
+  cityInput.value = row.short;
+  tzInfo.textContent = row.timezone_name
+    ? (row.timezone_name + ' · UTC' + (row.timezone_offset>=0?'+':'') + row.timezone_offset)
+    : '';
+  hideSuggest();
+}
+
+function escapeHtml(s) {
+  return (s||'').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+cityInput.addEventListener('input', (e) => {
+  const q = e.target.value.trim();
+  if (q === lastQuery) return;
+  lastQuery = q;
+  clearTimeout(cityDebounce);
+  cityDebounce = setTimeout(() => fetchCities(q), 300);
+});
+
+cityInput.addEventListener('focus', () => {
+  if (citySuggest.children.length) citySuggest.classList.remove('hidden');
+});
+
+document.addEventListener('click', (e) => {
+  if (!cityInput.contains(e.target) && !citySuggest.contains(e.target)) hideSuggest();
+});
+
+// Set today's date by default
+(() => {
+  const today = new Date();
+  const d = today.toISOString().slice(0,10);
+  document.querySelector('input[name=date]').value = d;
+})();
+</script>
+</body>
+</html>
