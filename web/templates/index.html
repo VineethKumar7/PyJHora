@@ -183,6 +183,10 @@
         <button type="button" id="lifeChartButton" data-panel="lifeChartOut" class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Life Chart</button>
       </div>
       <div class="flex items-center gap-2 order-2 md:order-3">
+        <label class="text-xs text-slate-500 hidden lg:inline" for="ayanamsaNav">Ayanamsa</label>
+        <select id="ayanamsaNav" class="text-sm border rounded px-2 py-1 bg-white">
+          <option value="LAHIRI" selected>Lahiri</option>
+        </select>
         <button type="button" id="editProfileButton" class="text-sm px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200 text-slate-700">✎ Edit</button>
         <button type="button" class="theme-toggle bg-white border border-slate-200 rounded-full w-9 h-9 flex items-center justify-center hover:bg-slate-100 shadow-sm" title="Toggle dark mode">
           <span class="theme-icon">🌙</span>
@@ -202,8 +206,15 @@
       </div>
 
       <div id="chartOut" class="hidden bg-white rounded-lg shadow p-5">
-        <div class="flex items-baseline justify-between border-b pb-2 mb-3">
+        <div class="flex items-baseline justify-between border-b pb-2 mb-3 gap-3 flex-wrap">
           <h2 id="chartTitle" class="font-semibold text-slate-700">Varga Chart</h2>
+          <div class="flex items-center gap-2">
+            <label class="text-xs text-slate-500" for="vargaNav">Chart Type</label>
+            <select id="vargaNav" class="text-sm border rounded px-2 py-1 bg-white">
+              <option value="1" selected>D-1 Rasi</option>
+              <option value="9">D-9 Navamsa</option>
+            </select>
+          </div>
           <span id="chartSubject" class="text-xs text-slate-500"></span>
         </div>
         <p id="ascLine" class="text-sm text-slate-600 mb-3"></p>
@@ -617,20 +628,28 @@ async function loadDasha() {
   document.getElementById('dashaOut').classList.remove('hidden');
 }
 
+function fillSelect(el, items, currentVal) {
+  el.innerHTML = '';
+  items.forEach(({ value, label }) => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    if (value === currentVal) opt.selected = true;
+    el.appendChild(opt);
+  });
+}
+
 async function populateVargaOptions() {
   try {
     const r = await fetch('/api/varga_list');
     if (!r.ok) return;
     const data = await r.json();
-    const sel = document.getElementById('vargaSelect');
-    sel.innerHTML = '';
-    data.factors.forEach(f => {
-      const opt = document.createElement('option');
-      opt.value = f.factor;
-      opt.textContent = f.label;
-      if (f.factor === 1) opt.selected = true;
-      sel.appendChild(opt);
-    });
+    const items = data.factors.map(f => ({ value: String(f.factor), label: f.label }));
+    const primary = document.getElementById('vargaSelect');
+    const current = primary.value || '1';
+    fillSelect(primary, items, current);
+    const nav = document.getElementById('vargaNav');
+    if (nav) fillSelect(nav, items, current);
   } catch (_) { /* keep fallback options */ }
 }
 
@@ -639,17 +658,30 @@ async function populateAyanamsaOptions() {
     const r = await fetch('/api/ayanamsa_list');
     if (!r.ok) return;
     const data = await r.json();
-    const sel = document.getElementById('ayanamsaSelect');
-    const current = sel.value || data.default;
-    sel.innerHTML = '';
-    data.modes.forEach(m => {
-      const opt = document.createElement('option');
-      opt.value = m;
-      opt.textContent = m.replace(/_/g, ' ').replace(/\w\S*/g, s => s[0]+s.slice(1).toLowerCase());
-      if (m === current) opt.selected = true;
-      sel.appendChild(opt);
-    });
+    const items = data.modes.map(m => ({
+      value: m,
+      label: m.replace(/_/g, ' ').replace(/\w\S*/g, s => s[0]+s.slice(1).toLowerCase()),
+    }));
+    const primary = document.getElementById('ayanamsaSelect');
+    const current = primary.value || data.default || 'LAHIRI';
+    fillSelect(primary, items, current);
+    const nav = document.getElementById('ayanamsaNav');
+    if (nav) fillSelect(nav, items, current);
   } catch (_) { /* keep fallback */ }
+}
+
+// Sync nav <-> form selects so FormData picks up whatever the user chose
+function bindSelectSync(primaryId, mirrorId, onChangeReload) {
+  const primary = document.getElementById(primaryId);
+  const mirror = document.getElementById(mirrorId);
+  if (!primary || !mirror) return;
+  mirror.addEventListener('change', () => {
+    primary.value = mirror.value;
+    if (onChangeReload) onChangeReload();
+  });
+  primary.addEventListener('change', () => {
+    mirror.value = primary.value;
+  });
 }
 
 const TABS = [
@@ -678,6 +710,15 @@ function setActiveTab(btnId) {
   });
 }
 
+function activeTab() {
+  return TABS.find(t => !document.getElementById(t.panel).classList.contains('hidden'));
+}
+
+async function reloadActiveTab() {
+  const t = activeTab();
+  if (t) { try { await t.loader(); } catch (e) { console.error(e); } }
+}
+
 TABS.forEach(t => {
   document.getElementById(t.id).addEventListener('click', async () => {
     setActiveTab(t.id);
@@ -685,6 +726,13 @@ TABS.forEach(t => {
     try { await t.loader(); } catch (e) { console.error(e); }
   });
 });
+
+// Nav-bar copies mirror the form selects (and reload when changed)
+bindSelectSync('vargaSelect', 'vargaNav', () => {
+  // Varga only affects the Rasi tab; reload if active
+  if (activeTab() && activeTab().id === 'chartButton') reloadActiveTab();
+});
+bindSelectSync('ayanamsaSelect', 'ayanamsaNav', reloadActiveTab);
 
 let lifeChartState = { slices: [], sliceDays: 30, labels: [], svgBaseW: 1000, explanations: {}, natal: null };
 
