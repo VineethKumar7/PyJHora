@@ -31,6 +31,17 @@
     <form id="form" class="md:col-span-1 bg-white rounded-lg shadow p-5 space-y-4">
       <h2 class="font-semibold text-slate-700 border-b pb-2">Birth / Event Details</h2>
       <div>
+        <label class="block text-sm text-slate-600 mb-1">Saved Profiles</label>
+        <div class="flex gap-2">
+          <select id="profileSelect" class="flex-1 border rounded px-2 py-1 text-sm bg-white">
+            <option value="">— load profile —</option>
+          </select>
+          <button type="button" id="profileSave" class="bg-slate-700 hover:bg-slate-800 text-white rounded px-3 py-1 text-sm">Save As</button>
+          <button type="button" id="profileDelete" class="bg-red-500 hover:bg-red-600 text-white rounded px-3 py-1 text-sm" title="Delete selected profile">✕</button>
+        </div>
+        <p id="autosaveStatus" class="text-[11px] text-slate-400 mt-1">Autosaved</p>
+      </div>
+      <div>
         <label class="block text-sm text-slate-600 mb-1">Name</label>
         <input type="text" name="name" placeholder="e.g. Vineeth" class="w-full border rounded px-3 py-2"/>
       </div>
@@ -394,6 +405,7 @@ function pickCity(row) {
     ? (row.timezone_name + ' · UTC' + (row.timezone_offset>=0?'+':'') + row.timezone_offset)
     : '';
   hideSuggest();
+  if (typeof scheduleAutosave === 'function') scheduleAutosave();
 }
 
 function escapeHtml(s) {
@@ -417,11 +429,121 @@ document.addEventListener('click', (e) => {
   if (!cityInput.contains(e.target) && !citySuggest.contains(e.target)) hideSuggest();
 });
 
-// Set today's date by default
-(() => {
-  const today = new Date();
-  const d = today.toISOString().slice(0,10);
-  document.querySelector('input[name=date]').value = d;
+// --- Persistence: autosave form + named profiles ---
+const FORM_FIELDS = ['name','gender','date','time','latitude','longitude','timezone'];
+
+function collectForm() {
+  const fd = new FormData();
+  FORM_FIELDS.forEach(k => {
+    const el = document.querySelector('[name='+k+']');
+    fd.append(k, el ? (el.value ?? '') : '');
+  });
+  fd.append('city', cityInput.value || '');
+  return fd;
+}
+
+function applyProfile(p) {
+  if (!p) return;
+  FORM_FIELDS.forEach(k => {
+    const el = document.querySelector('[name='+k+']');
+    if (el && p[k] !== undefined && p[k] !== null && p[k] !== '') el.value = p[k];
+  });
+  if (p.city) cityInput.value = p.city;
+  if (p.timezone !== undefined && p.timezone !== '') {
+    tzInfo.textContent = 'UTC' + (p.timezone>=0?'+':'') + p.timezone;
+  }
+}
+
+let autosaveTimer = null;
+function scheduleAutosave() {
+  clearTimeout(autosaveTimer);
+  const status = document.getElementById('autosaveStatus');
+  status.textContent = 'Saving…';
+  autosaveTimer = setTimeout(async () => {
+    try {
+      await fetch('/api/autosave', { method:'POST', body: collectForm() });
+      status.textContent = 'Autosaved · ' + new Date().toLocaleTimeString();
+    } catch(_) { status.textContent = 'Autosave failed'; }
+  }, 500);
+}
+
+async function loadAutosave() {
+  try {
+    const r = await fetch('/api/autosave');
+    if (!r.ok) return false;
+    const d = await r.json();
+    if (d.profile) { applyProfile(d.profile); return true; }
+  } catch(_) {}
+  return false;
+}
+
+async function refreshProfileList() {
+  const sel = document.getElementById('profileSelect');
+  const current = sel.value;
+  try {
+    const r = await fetch('/api/profiles');
+    if (!r.ok) return;
+    const d = await r.json();
+    sel.innerHTML = '<option value="">— load profile —</option>';
+    d.profiles.forEach(p => {
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = p.label + (p.name?' ('+p.name+')':'');
+      sel.appendChild(o);
+    });
+    if (current) sel.value = current;
+  } catch(_) {}
+}
+
+async function onProfileSelect() {
+  const id = document.getElementById('profileSelect').value;
+  if (!id) return;
+  const r = await fetch('/api/profiles/'+id);
+  if (!r.ok) return;
+  const d = await r.json();
+  applyProfile(d.profile);
+  scheduleAutosave();
+}
+
+async function onProfileSaveAs() {
+  const label = prompt('Save profile as (e.g. "Vineeth — birth"):');
+  if (!label) return;
+  const fd = collectForm();
+  fd.append('label', label);
+  const r = await fetch('/api/profiles', { method:'POST', body: fd });
+  if (!r.ok) { showErr('Save failed'); return; }
+  await refreshProfileList();
+  const sel = document.getElementById('profileSelect');
+  const d = await r.json();
+  sel.value = d.profile.id;
+}
+
+async function onProfileDelete() {
+  const sel = document.getElementById('profileSelect');
+  const id = sel.value;
+  if (!id) return;
+  const name = sel.options[sel.selectedIndex].textContent;
+  if (!confirm('Delete profile "'+name+'"?')) return;
+  await fetch('/api/profiles/'+id, { method:'DELETE' });
+  await refreshProfileList();
+}
+
+document.getElementById('profileSelect').addEventListener('change', onProfileSelect);
+document.getElementById('profileSave').addEventListener('click', onProfileSaveAs);
+document.getElementById('profileDelete').addEventListener('click', onProfileDelete);
+
+// Attach autosave to every form field and the city input
+document.getElementById('form').addEventListener('input', scheduleAutosave);
+cityInput.addEventListener('input', scheduleAutosave);
+
+// Initial load: try restoring autosave; if none, default today's date
+(async () => {
+  const restored = await loadAutosave();
+  if (!restored) {
+    const today = new Date();
+    document.querySelector('input[name=date]').value = today.toISOString().slice(0,10);
+  }
+  await refreshProfileList();
 })();
 </script>
 </body>

@@ -20,7 +20,10 @@ from jhora.panchanga import drik  # noqa: E402
 from jhora.horoscope.chart import charts  # noqa: E402
 from jhora.horoscope.dhasa.graha import vimsottari  # noqa: E402
 
+from web import db  # noqa: E402
+
 utils.get_resource_lists()
+db.init_db()
 _tzfinder = TimezoneFinder()
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_HEADERS = {"User-Agent": "PyJHora-Web/1.0 (local use)"}
@@ -338,6 +341,73 @@ async def dasha(
         },
         "periods": periods,
     })
+
+
+@app.get("/api/autosave")
+async def get_autosave():
+    row = db.get_profile(db.AUTOSAVE_KEY)
+    return {"profile": row}
+
+
+@app.post("/api/autosave")
+async def set_autosave(
+    name: str = Form(""),
+    gender: str = Form(""),
+    date: str = Form(""),
+    time: str = Form(""),
+    city: str = Form(""),
+    latitude: str = Form(""),
+    longitude: str = Form(""),
+    timezone: str = Form(""),
+):
+    row = db.upsert_profile(db.AUTOSAVE_KEY, {
+        "name": name, "gender": gender, "date": date, "time": time,
+        "city": city, "latitude": latitude, "longitude": longitude, "timezone": timezone,
+    })
+    return {"ok": True, "profile": row}
+
+
+@app.get("/api/profiles")
+async def profiles_list():
+    return {"profiles": db.list_profiles()}
+
+
+@app.post("/api/profiles")
+async def profiles_save(
+    label: str = Form(...),
+    name: str = Form(""),
+    gender: str = Form(""),
+    date: str = Form(""),
+    time: str = Form(""),
+    city: str = Form(""),
+    latitude: str = Form(""),
+    longitude: str = Form(""),
+    timezone: str = Form(""),
+):
+    label = label.strip()
+    if not label or label == db.AUTOSAVE_KEY:
+        return JSONResponse({"error": "Invalid profile label"}, status_code=400)
+    row = db.upsert_profile(label, {
+        "name": name, "gender": gender, "date": date, "time": time,
+        "city": city, "latitude": latitude, "longitude": longitude, "timezone": timezone,
+    })
+    return {"ok": True, "profile": row}
+
+
+@app.get("/api/profiles/{profile_id}")
+async def profiles_get(profile_id: int):
+    row = db.get_profile_by_id(profile_id)
+    if not row or row["label"] == db.AUTOSAVE_KEY:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    return {"profile": row}
+
+
+@app.delete("/api/profiles/{profile_id}")
+async def profiles_delete(profile_id: int):
+    ok = db.delete_profile(profile_id)
+    if not ok:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    return {"ok": True}
 
 
 if __name__ == "__main__":
