@@ -192,10 +192,55 @@
           <span class="text-slate-400">· scroll horizontally to pan</span>
         </div>
         <div id="lifeChartSvg" class="relative overflow-x-auto border border-slate-100 rounded">
-          <div id="lifeChartTooltip" class="hidden absolute top-1 right-2 pointer-events-none bg-slate-800 text-white text-xs rounded px-2 py-1 shadow"></div>
-          <div id="lifeChartCursor" class="hidden absolute top-0 pointer-events-none border-l border-slate-400/70" style="height:100%"></div>
+          <div id="lifeChartTooltip" class="hidden absolute top-1 right-2 pointer-events-none bg-slate-800 text-white text-xs rounded px-2 py-1 shadow z-10"></div>
+          <div id="lifeChartCursor" class="hidden absolute top-0 pointer-events-none border-l border-slate-500/60" style="height:100%"></div>
         </div>
-        <p class="text-xs text-slate-400 mt-3">Simplified rule engine (~25 rules), inspired by VedAstro. Dasha-based colouring at 30-day resolution.</p>
+        <p class="text-xs text-slate-400 mt-2">Click any bar to see the exact rules that produced its colour. Hover to preview.</p>
+
+        <div id="lifeChartDetail" class="hidden mt-4 bg-slate-50 border border-slate-200 rounded p-3 text-sm"></div>
+
+        <details class="mt-3 text-sm text-slate-600">
+          <summary class="cursor-pointer font-medium text-slate-700">How this chart is scored</summary>
+          <div id="lifeChartNatal" class="mt-2 text-xs text-slate-600"></div>
+          <div class="mt-3 grid md:grid-cols-2 gap-4 text-xs">
+            <div>
+              <div class="font-semibold text-slate-700 mb-1">Marriage rules</div>
+              <ul class="list-disc pl-5 space-y-0.5 text-slate-600">
+                <li>7th lord in 1/4/5/9/10/11 → +1 · in 6/8/12 → −1</li>
+                <li>Venus well-placed (1/4/5/7/11) → +1 · in 6/8/12 → −1</li>
+                <li>Venus exalted/own sign → +1 · debilitated → −1</li>
+                <li>Mars in 7th (Kuja dosha) → −1</li>
+                <li>Saturn in 7th → −1 · Rahu/Ketu in 7th → −1</li>
+                <li>Jupiter or Venus in 7th → +1</li>
+                <li>Mahadasha of 7th lord → +2</li>
+                <li>Venus Mahadasha → +1</li>
+                <li>Jupiter Mahadasha (Jupiter well placed) → +1</li>
+                <li>Antardasha of 7th lord → +1 · Venus Antardasha → +1</li>
+              </ul>
+            </div>
+            <div>
+              <div class="font-semibold text-slate-700 mb-1">Career rules</div>
+              <ul class="list-disc pl-5 space-y-0.5 text-slate-600">
+                <li>10th lord in 1/4/5/9/10/11 → +1 · in 6/8/12 → −1</li>
+                <li>Sun in 1/9/10/11 → +1 · Sun exalted/own → +1, debilitated → −1</li>
+                <li>Saturn in 10th → +1 (disciplined career)</li>
+                <li>Mercury well placed (1/2/5/10/11) → +1</li>
+                <li>Benefic in 10th → +1</li>
+                <li>Mahadasha of 10th lord → +2</li>
+                <li>Sun MD (well placed) → +1</li>
+                <li>Saturn MD (in upachaya 3/6/10/11) → +1</li>
+                <li>Mercury MD (well placed) → +1</li>
+                <li>MD in 6/8/12 → −1</li>
+                <li>Antardasha of 10th lord → +1</li>
+              </ul>
+            </div>
+          </div>
+          <p class="mt-3 text-xs text-slate-400">
+            Score is clamped to ±3. Bucketing: ≥2 dark green, 1 light green, 0 neutral,
+            −1 pink, ≤−2 dark red. This is a simplified engine — classical astrology
+            uses transits, Ashtakavarga, aspects and yogas that aren't modelled here yet.
+          </p>
+        </details>
       </div>
 
       <div id="errOut" class="hidden bg-red-50 border border-red-300 text-red-700 rounded p-3 text-sm"></div>
@@ -446,7 +491,74 @@ document.getElementById('bhavaButton').addEventListener('click', loadBhava);
 document.getElementById('dashaButton').addEventListener('click', loadDasha);
 document.getElementById('lifeChartButton').addEventListener('click', loadLifeChart);
 
-let lifeChartState = { slices: [], sliceDays: 30, labels: [], svgBaseW: 1000 };
+let lifeChartState = { slices: [], sliceDays: 30, labels: [], svgBaseW: 1000, explanations: {}, natal: null };
+
+function lifeChartClick(e) {
+  const svg = document.querySelector('#lifeChartSvg svg');
+  if (!svg) return;
+  const rect = svg.getBoundingClientRect();
+  const z = rect.width / lifeChartState.svgBaseW;
+  const svgX = (e.clientX - rect.left) / z;
+  const leftPad = parseFloat(svg.dataset.leftPad || '70');
+  const plotW = parseFloat(svg.dataset.plotW || '918');
+  const totalDays = parseFloat(svg.dataset.totalDays || '36525');
+  const birthStr = svg.dataset.birthDate;
+  let frac = (svgX - leftPad) / plotW;
+  frac = Math.max(0, Math.min(1, frac));
+  const dayOffset = frac * totalDays;
+  const birth = new Date(birthStr + 'T00:00:00Z');
+  const at = new Date(birth.getTime() + dayOffset * 86400000);
+  const sliceIdx = Math.min(lifeChartState.slices.length - 1,
+    Math.max(0, Math.floor(dayOffset / lifeChartState.sliceDays)));
+  const s = lifeChartState.slices[sliceIdx] || [];
+  if (s.length < 2) return;
+  const key = s[0] + '_' + s[1];
+  const ex = lifeChartState.explanations[key];
+  const box = document.getElementById('lifeChartDetail');
+  if (!ex) { box.classList.add('hidden'); return; }
+  const dateStr = formatDate(at);
+  const ageYears = (dayOffset / 365.25).toFixed(1);
+  const renderReasons = (arr) => arr.length
+    ? '<ul class="list-disc pl-5 space-y-0.5 text-slate-700">' +
+      arr.map(r => '<li>' + r + '</li>').join('') + '</ul>'
+    : '<span class="text-slate-400">No active signals</span>';
+  box.innerHTML =
+    '<div class="flex items-baseline justify-between mb-2">' +
+      '<div><span class="font-semibold text-slate-800">' + dateStr + '</span>' +
+      ' · age ' + ageYears + ' · <span class="text-slate-600">MD ' + ex.md_name +
+      ' / AD ' + ex.ad_name + '</span></div>' +
+      '<button type="button" class="text-xs text-slate-400 hover:text-slate-600" onclick="document.getElementById(\'lifeChartDetail\').classList.add(\'hidden\')">close ×</button>' +
+    '</div>' +
+    '<div class="grid md:grid-cols-2 gap-4">' +
+      '<div><div class="text-sm font-medium text-rose-700 mb-1">Marriage: ' +
+        (ex.marriage >= 0 ? '+' : '') + ex.marriage + '</div>' + renderReasons(ex.marriage_reasons) + '</div>' +
+      '<div><div class="text-sm font-medium text-sky-700 mb-1">Career: ' +
+        (ex.career >= 0 ? '+' : '') + ex.career + '</div>' + renderReasons(ex.career_reasons) + '</div>' +
+    '</div>';
+  box.classList.remove('hidden');
+}
+
+function renderNatalSummary() {
+  const n = lifeChartState.natal;
+  const box = document.getElementById('lifeChartNatal');
+  if (!n || !box) return;
+  const fmt = (label, obj) => {
+    if (!obj || obj.house == null) return '<div>' + label + ': <span class="text-slate-400">n/a</span></div>';
+    const d = obj.dignity && obj.dignity !== '—' ? ' (' + obj.dignity + ')' : '';
+    return '<div>' + label + ': house ' + obj.house + d + '</div>';
+  };
+  box.innerHTML =
+    '<div class="font-semibold text-slate-700 mb-1">Your chart features (what the rules see)</div>' +
+    '<div class="grid sm:grid-cols-2 gap-x-6 gap-y-0.5">' +
+      '<div>Ascendant: ' + n.ascendant + '</div>' +
+      '<div>7th lord: ' + n.lord_7 + (n.lord_7_house ? ' in ' + n.lord_7_house + 'th' : '') + '</div>' +
+      '<div>10th lord: ' + n.lord_10 + (n.lord_10_house ? ' in ' + n.lord_10_house + 'th' : '') + '</div>' +
+      '<div>In 7th: ' + (n.seventh_occupants.join(', ') || '—') + '</div>' +
+      '<div>In 10th: ' + (n.tenth_occupants.join(', ') || '—') + '</div>' +
+      fmt('Venus', n.venus) + fmt('Jupiter', n.jupiter) +
+      fmt('Sun', n.sun) + fmt('Saturn', n.saturn) + fmt('Mercury', n.mercury) +
+    '</div>';
+}
 
 function applyLifeZoom() {
   const z = parseFloat(document.getElementById('lifeZoom').value) || 1;
@@ -529,6 +641,10 @@ async function loadLifeChart() {
     lifeChartState.slices = d.slices || [];
     lifeChartState.sliceDays = d.slice_days || 30;
     lifeChartState.labels = d.planet_labels || [];
+    lifeChartState.explanations = d.explanations || {};
+    lifeChartState.natal = d.natal || null;
+    renderNatalSummary();
+    document.getElementById('lifeChartDetail').classList.add('hidden');
     document.getElementById('lifeChartOut').classList.remove('hidden');
     applyLifeZoom();
   } finally {
@@ -550,6 +666,8 @@ document.getElementById('lifeZoomOut').addEventListener('click', () => {
 });
 document.getElementById('lifeChartSvg').addEventListener('mousemove', lifeChartMouseMove);
 document.getElementById('lifeChartSvg').addEventListener('mouseleave', lifeChartMouseLeave);
+document.getElementById('lifeChartSvg').addEventListener('click', lifeChartClick);
+document.getElementById('lifeChartSvg').style.cursor = 'crosshair';
 populateVargaOptions();
 populateAyanamsaOptions();
 

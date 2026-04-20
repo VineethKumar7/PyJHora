@@ -421,6 +421,8 @@ async def life_chart_endpoint(
         "slice_days": slice_days,
         "slices": compact,
         "planet_labels": ["Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn", "Rahu", "Ketu"],
+        "explanations": timeline["explanations"],
+        "natal": life_chart.natal_summary(timeline["natal"]),
     })
 
 

@@ -236,21 +236,60 @@ def build_timeline(jd: float, place, years: int = 100, slice_days: int = 30) -> 
     slices = []
     end_jd = jd + years * 365.25
     cur = jd
+    explanations = {}
     while cur < end_jd:
         md = _lord_at(md_ranges, cur, MOON)
         ad = _lord_at(ad_ranges, cur, md)
-        m_score, _ = score_marriage(natal, md, ad)
-        c_score, _ = score_career(natal, md, ad)
+        key = f"{md}_{ad}"
+        if key not in explanations:
+            m_score, m_reasons = score_marriage(natal, md, ad)
+            c_score, c_reasons = score_career(natal, md, ad)
+            explanations[key] = {
+                "md": md, "ad": ad,
+                "md_name": _name(md), "ad_name": _name(ad),
+                "marriage": m_score, "marriage_reasons": m_reasons,
+                "career": c_score, "career_reasons": c_reasons,
+            }
+        e = explanations[key]
         slices.append({
             "jd": cur,
             "md": md,
             "ad": ad,
-            "marriage": m_score,
-            "career": c_score,
+            "marriage": e["marriage"],
+            "career": e["career"],
         })
         cur += slice_days
 
-    return {"natal": natal, "slices": slices, "start_jd": jd, "end_jd": end_jd}
+    return {"natal": natal, "slices": slices, "start_jd": jd,
+            "end_jd": end_jd, "explanations": explanations}
+
+
+def natal_summary(natal: dict) -> dict:
+    """Flat dict describing chart features the scoring rules care about."""
+    p = natal["planets"]
+    asc = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra",
+           "Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"][natal["asc_sign"]]
+    def describe(pid):
+        v = p.get(pid)
+        if not v:
+            return {"house": None, "sign": None, "dignity": "—"}
+        dg = _dignity_bonus(natal, pid)
+        dignity = "exalted/own" if dg > 0 else ("debilitated" if dg < 0 else "—")
+        return {"house": v["house"], "sign": v["sign"], "dignity": dignity}
+    return {
+        "ascendant": asc,
+        "lord_7": _name(natal["house_lord"][7]),
+        "lord_7_house": p.get(natal["house_lord"][7], {}).get("house"),
+        "lord_10": _name(natal["house_lord"][10]),
+        "lord_10_house": p.get(natal["house_lord"][10], {}).get("house"),
+        "venus": describe(VENUS),
+        "jupiter": describe(JUPITER),
+        "sun": describe(SUN),
+        "saturn": describe(SATURN),
+        "mercury": describe(MERCURY),
+        "seventh_occupants": [_name(pid) for pid, v in p.items() if v["house"] == 7],
+        "tenth_occupants": [_name(pid) for pid, v in p.items() if v["house"] == 10],
+    }
 
 
 def _tuple_to_jd(t) -> float:
