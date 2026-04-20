@@ -348,13 +348,14 @@ async def dasha(
 ):
     _apply_ayanamsa(ayanamsa)
     place, jd, _, _ = _make_place_and_jd(date, time, latitude, longitude, timezone)
-    level = max(1, min(int(level), 3))
+    level = max(1, min(int(level), 4))
     md_result = vimsottari.get_vimsottari_dhasa_bhukthi(jd, place, dhasa_level_index=1)
     balance = md_result[0]
     balance_years = balance[0] + balance[1] / 12.0 + balance[2] / 365.25
 
     ad_by_md = {}
     pd_by_md_ad = {}
+    sd_by_md_ad_pd = {}
     if level >= 2:
         ad_result = vimsottari.get_vimsottari_dhasa_bhukthi(jd, place, dhasa_level_index=2)
         for entry in ad_result[1]:
@@ -377,6 +378,17 @@ async def dasha(
                 "start": _fmt_dasha_date(entry[1]),
                 "duration_years": round(entry[2], 5),
             })
+    if level >= 4:
+        sd_result = vimsottari.get_vimsottari_dhasa_bhukthi(jd, place, dhasa_level_index=4)
+        for entry in sd_result[1]:
+            lords = entry[0]
+            key = (lords[0], lords[1], lords[2])
+            sd_by_md_ad_pd.setdefault(key, []).append({
+                "lord": _token_to_name(lords[3]),
+                "lord_id": lords[3],
+                "start": _fmt_dasha_date(entry[1]),
+                "duration_years": round(entry[2], 6),
+            })
 
     periods = []
     for entry in md_result[1]:
@@ -393,7 +405,13 @@ async def dasha(
             ads = ad_by_md.get(md_lord, [])
             if level >= 3:
                 for ad in ads:
-                    ad["pratyantardashas"] = pd_by_md_ad.get((md_lord, ad["lord_id"]), [])
+                    pds = pd_by_md_ad.get((md_lord, ad["lord_id"]), [])
+                    if level >= 4:
+                        for pd in pds:
+                            pd["sookshmadashas"] = sd_by_md_ad_pd.get(
+                                (md_lord, ad["lord_id"], pd["lord_id"]), []
+                            )
+                    ad["pratyantardashas"] = pds
             row["antardashas"] = ads
         periods.append(row)
     return JSONResponse({

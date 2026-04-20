@@ -470,9 +470,17 @@ async function loadBhava() {
   document.getElementById('bhavaOut').classList.remove('hidden');
 }
 
+function fmtDur(years, level) {
+  // level 1 → years, 2 → months, 3 → days, 4 → hours
+  if (level === 1) return (+years).toFixed(2) + ' y';
+  if (level === 2) return (years * 12).toFixed(2) + ' mo';
+  if (level === 3) return (years * 365.25).toFixed(2) + ' d';
+  return (years * 8766).toFixed(1) + ' h';
+}
+
 async function loadDasha() {
   const fd = ensureForm(); if (!fd) return;
-  fd.set('level', '3');
+  fd.set('level', '4');
   const r = await fetch('/api/dasha', { method:'POST', body: fd });
   if (!r.ok) { showErr('Dasha failed: '+r.status); return; }
   const d = await r.json();
@@ -491,7 +499,7 @@ async function loadDasha() {
       '<td class="py-2 pr-3 text-slate-400">'+(i+1)+'</td>'+
       '<td class="py-2 pr-3 font-medium text-slate-800">'+caret+p.lord+'</td>'+
       '<td class="py-2 pr-3 text-slate-600">'+p.start+'</td>'+
-      '<td class="py-2 text-slate-700">'+p.duration_years+'</td>';
+      '<td class="py-2 text-slate-700">'+fmtDur(p.duration_years, 1)+'</td>';
     tbody.appendChild(mdRow);
     if (hasAD) {
       const childRow = document.createElement('tr');
@@ -499,11 +507,11 @@ async function loadDasha() {
       const td = document.createElement('td');
       td.colSpan = 4;
       td.className = 'py-2 pl-6 pr-3';
-      let inner = '<div class="text-xs text-slate-500 mb-1">Antardasha — click a row to see Pratyantardasha</div>'+
+      let inner = '<div class="text-xs text-slate-500 mb-1">Antardasha (months) — click a row to see Pratyantardasha</div>'+
         '<table class="w-full text-xs"><thead><tr class="text-left text-slate-400 border-b">'+
         '<th class="py-1 pr-3 w-6"></th>'+
         '<th class="py-1 pr-3">#</th><th class="py-1 pr-3">Lord</th>'+
-        '<th class="py-1 pr-3">Start</th><th class="py-1">Duration (years)</th></tr></thead><tbody id="adBody-'+i+'">';
+        '<th class="py-1 pr-3">Start</th><th class="py-1">Duration</th></tr></thead><tbody id="adBody-'+i+'">';
       p.antardashas.forEach((ad, j) => {
         const hasPD = Array.isArray(ad.pratyantardashas) && ad.pratyantardashas.length > 0;
         const adCaret = hasPD ? '<span class="text-slate-400 pd-caret">▸</span>' : '';
@@ -512,18 +520,37 @@ async function loadDasha() {
           '<td class="py-1 pr-3 text-slate-400">'+(j+1)+'</td>'+
           '<td class="py-1 pr-3 text-slate-700">'+ad.lord+'</td>'+
           '<td class="py-1 pr-3 text-slate-600">'+ad.start+'</td>'+
-          '<td class="py-1 text-slate-700">'+ad.duration_years+'</td></tr>';
+          '<td class="py-1 text-slate-700">'+fmtDur(ad.duration_years, 2)+'</td></tr>';
         if (hasPD) {
           inner += '<tr class="pd-group hidden" data-md="'+i+'" data-ad="'+j+'"><td></td><td colspan="4" class="py-1 pl-3 pr-3 bg-white">'+
-            '<div class="text-[11px] text-slate-400 mb-1">Pratyantardasha under '+p.lord+' / '+ad.lord+'</div>'+
+            '<div class="text-[11px] text-slate-400 mb-1">Pratyantardasha (days) under '+p.lord+' / '+ad.lord+' — click a row to see Sookshmadasha</div>'+
             '<table class="w-full text-[11px]"><thead><tr class="text-left text-slate-400 border-b">'+
+            '<th class="py-0.5 pr-3 w-5"></th>'+
             '<th class="py-0.5 pr-3">#</th><th class="py-0.5 pr-3">Lord</th>'+
-            '<th class="py-0.5 pr-3">Start</th><th class="py-0.5">Duration (years)</th></tr></thead><tbody>';
+            '<th class="py-0.5 pr-3">Start</th><th class="py-0.5">Duration</th></tr></thead><tbody>';
           ad.pratyantardashas.forEach((pd, k) => {
-            inner += '<tr><td class="py-0.5 pr-3 text-slate-400">'+(k+1)+'</td>'+
+            const hasSD = Array.isArray(pd.sookshmadashas) && pd.sookshmadashas.length > 0;
+            const pdCaret = hasSD ? '<span class="text-slate-400 sd-caret">▸</span>' : '';
+            inner += '<tr class="pd-row'+(hasSD ? ' cursor-pointer hover:bg-slate-50' : '')+'" data-md="'+i+'" data-ad="'+j+'" data-pd="'+k+'">'+
+              '<td class="py-0.5 pr-3">'+pdCaret+'</td>'+
+              '<td class="py-0.5 pr-3 text-slate-400">'+(k+1)+'</td>'+
               '<td class="py-0.5 pr-3 text-slate-700">'+pd.lord+'</td>'+
               '<td class="py-0.5 pr-3 text-slate-600">'+pd.start+'</td>'+
-              '<td class="py-0.5 text-slate-700">'+pd.duration_years+'</td></tr>';
+              '<td class="py-0.5 text-slate-700">'+fmtDur(pd.duration_years, 3)+'</td></tr>';
+            if (hasSD) {
+              inner += '<tr class="sd-group hidden" data-md="'+i+'" data-ad="'+j+'" data-pd="'+k+'"><td></td><td colspan="4" class="py-0.5 pl-3 pr-3 bg-slate-50">'+
+                '<div class="text-[10px] text-slate-400 mb-1">Sookshmadasha (hours) under '+p.lord+' / '+ad.lord+' / '+pd.lord+'</div>'+
+                '<table class="w-full text-[10px]"><thead><tr class="text-left text-slate-400 border-b">'+
+                '<th class="py-0.5 pr-3">#</th><th class="py-0.5 pr-3">Lord</th>'+
+                '<th class="py-0.5 pr-3">Start</th><th class="py-0.5">Duration</th></tr></thead><tbody>';
+              pd.sookshmadashas.forEach((sd, m) => {
+                inner += '<tr><td class="py-0.5 pr-3 text-slate-400">'+(m+1)+'</td>'+
+                  '<td class="py-0.5 pr-3 text-slate-700">'+sd.lord+'</td>'+
+                  '<td class="py-0.5 pr-3 text-slate-600">'+sd.start+'</td>'+
+                  '<td class="py-0.5 text-slate-700">'+fmtDur(sd.duration_years, 4)+'</td></tr>';
+              });
+              inner += '</tbody></table></td></tr>';
+            }
           });
           inner += '</tbody></table></td></tr>';
         }
@@ -546,6 +573,18 @@ async function loadDasha() {
             pdGroup.classList.toggle('hidden');
             const c = tr.querySelector('.pd-caret');
             if (c) c.textContent = pdGroup.classList.contains('hidden') ? '▸' : '▾';
+          }
+        });
+      });
+      childRow.querySelectorAll('tr.pd-row').forEach(tr => {
+        tr.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const md = tr.dataset.md, ad = tr.dataset.ad, pd = tr.dataset.pd;
+          const sdGroup = childRow.querySelector('tr.sd-group[data-md="'+md+'"][data-ad="'+ad+'"][data-pd="'+pd+'"]');
+          if (sdGroup) {
+            sdGroup.classList.toggle('hidden');
+            const c = tr.querySelector('.sd-caret');
+            if (c) c.textContent = sdGroup.classList.contains('hidden') ? '▸' : '▾';
           }
         });
       });
