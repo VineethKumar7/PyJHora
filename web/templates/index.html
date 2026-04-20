@@ -85,15 +85,15 @@
         </div>
       </div>
       <div>
-        <label class="block text-sm text-slate-600 mb-1">Divisional Chart</label>
+        <label class="block text-sm text-slate-600 mb-1">Chart Type</label>
         <select id="vargaSelect" class="w-full border rounded px-3 py-2 bg-white">
-          <option value="1">D-1 Rasi</option>
-          <option value="9" selected>D-9 Navamsa</option>
+          <option value="1" selected>D-1 Rasi</option>
+          <option value="9">D-9 Navamsa</option>
         </select>
       </div>
       <div class="grid grid-cols-2 gap-2">
         <button type="button" id="panchButton" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded py-2 font-medium">Panchangam</button>
-        <button type="button" id="chartButton" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded py-2 font-medium">Varga Chart</button>
+        <button type="button" id="chartButton" class="bg-emerald-600 hover:bg-emerald-700 text-white rounded py-2 font-medium">Show Chart</button>
         <button type="button" id="bhavaButton" class="bg-amber-600 hover:bg-amber-700 text-white rounded py-2 font-medium">Bhava</button>
         <button type="button" id="dashaButton" class="bg-rose-600 hover:bg-rose-700 text-white rounded py-2 font-medium">Vimshottari Dasha</button>
       </div>
@@ -348,7 +348,7 @@ async function populateVargaOptions() {
       const opt = document.createElement('option');
       opt.value = f.factor;
       opt.textContent = f.label;
-      if (f.factor === 9) opt.selected = true;
+      if (f.factor === 1) opt.selected = true;
       sel.appendChild(opt);
     });
   } catch (_) { /* keep fallback options */ }
