@@ -24,6 +24,20 @@ from web import db  # noqa: E402
 
 utils.get_resource_lists()
 db.init_db()
+
+AYANAMSA_MODES = [
+    "LAHIRI", "KP", "RAMAN", "TRUE_PUSHYA", "YUKTESHWAR",
+    "FAGAN", "USHASHASHI", "SURYASIDDHANTA", "ARYABHATA",
+]
+DEFAULT_AYANAMSA = "LAHIRI"
+
+
+def _apply_ayanamsa(mode: Optional[str]) -> str:
+    m = (mode or DEFAULT_AYANAMSA).upper()
+    if m not in const.available_ayanamsa_modes:
+        m = DEFAULT_AYANAMSA
+    drik.set_ayanamsa_mode(m)
+    return m
 _tzfinder = TimezoneFinder()
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
 NOMINATIM_HEADERS = {"User-Agent": "PyJHora-Web/1.0 (local use)"}
@@ -156,6 +170,11 @@ async def geocode(q: str = Query(..., min_length=2), limit: int = Query(6, ge=1,
     return {"results": results}
 
 
+@app.get("/api/ayanamsa_list")
+async def ayanamsa_list():
+    return {"modes": AYANAMSA_MODES, "default": DEFAULT_AYANAMSA}
+
+
 @app.post("/api/panchangam")
 async def panchangam(
     date: str = Form(...),
@@ -163,7 +182,9 @@ async def panchangam(
     latitude: float = Form(50.3569),
     longitude: float = Form(7.5890),
     timezone: float = Form(1.0),
+    ayanamsa: Optional[str] = Form(None),
 ):
+    _apply_ayanamsa(ayanamsa)
     place, jd, _, _ = _make_place_and_jd(date, time, latitude, longitude, timezone)
 
     nak = drik.nakshatra(jd, place)
@@ -218,12 +239,15 @@ async def chart(
     latitude: float = Form(...),
     longitude: float = Form(...),
     timezone: float = Form(...),
+    ayanamsa: Optional[str] = Form(None),
 ):
+    mode = _apply_ayanamsa(ayanamsa)
     place, jd, _, _ = _make_place_and_jd(date, time, latitude, longitude, timezone)
     rasi = charts.rasi_chart(jd, place)
     rasi_names = utils.RAASI_LIST
     ascendant_sign, houses = _houses_from_varga_rows(rasi_names, rasi)
     return JSONResponse({
+        "ayanamsa": mode,
         "ascendant_sign": ascendant_sign,
         "ascendant_sign_name": rasi_names[ascendant_sign] if ascendant_sign is not None else None,
         "houses": houses,
@@ -243,7 +267,9 @@ async def varga(
     longitude: float = Form(...),
     timezone: float = Form(...),
     factor: int = Form(9),
+    ayanamsa: Optional[str] = Form(None),
 ):
+    mode = _apply_ayanamsa(ayanamsa)
     place, jd, _, _ = _make_place_and_jd(date, time, latitude, longitude, timezone)
     rasi_names = utils.RAASI_LIST
     if factor == 1:
@@ -253,6 +279,7 @@ async def varga(
     ascendant_sign, houses = _houses_from_varga_rows(rasi_names, rows)
     label = next((lbl for f, lbl in VARGA_FACTORS if f == factor), f"D-{factor}")
     return JSONResponse({
+        "ayanamsa": mode,
         "factor": factor,
         "label": label,
         "ascendant_sign": ascendant_sign,
@@ -268,7 +295,9 @@ async def bhava(
     latitude: float = Form(...),
     longitude: float = Form(...),
     timezone: float = Form(...),
+    ayanamsa: Optional[str] = Form(None),
 ):
+    _apply_ayanamsa(ayanamsa)
     place, jd, _, _ = _make_place_and_jd(date, time, latitude, longitude, timezone)
     rasi_names = utils.RAASI_LIST
     bhava_rows = charts.bhava_chart(jd, place)
@@ -312,7 +341,9 @@ async def dasha(
     longitude: float = Form(...),
     timezone: float = Form(...),
     level: int = Form(1),
+    ayanamsa: Optional[str] = Form(None),
 ):
+    _apply_ayanamsa(ayanamsa)
     place, jd, _, _ = _make_place_and_jd(date, time, latitude, longitude, timezone)
     level = max(1, min(int(level), 2))
     vim = vimsottari.get_vimsottari_dhasa_bhukthi(jd, place, dhasa_level_index=level)

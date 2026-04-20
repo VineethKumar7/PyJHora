@@ -84,12 +84,20 @@
           <input type="number" step="0.25" name="timezone" value="1.0" class="w-full border rounded px-2 py-1 text-sm"/>
         </div>
       </div>
-      <div>
-        <label class="block text-sm text-slate-600 mb-1">Chart Type</label>
-        <select id="vargaSelect" class="w-full border rounded px-3 py-2 bg-white">
-          <option value="1" selected>D-1 Rasi</option>
-          <option value="9">D-9 Navamsa</option>
-        </select>
+      <div class="grid grid-cols-2 gap-2">
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">Chart Type</label>
+          <select id="vargaSelect" class="w-full border rounded px-2 py-2 bg-white">
+            <option value="1" selected>D-1 Rasi</option>
+            <option value="9">D-9 Navamsa</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-600 mb-1">Ayanamsa</label>
+          <select id="ayanamsaSelect" name="ayanamsa" class="w-full border rounded px-2 py-2 bg-white">
+            <option value="LAHIRI" selected>Lahiri</option>
+          </select>
+        </div>
       </div>
       <div class="grid grid-cols-2 gap-2">
         <button type="button" id="panchButton" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded py-2 font-medium">Panchangam</button>
@@ -248,7 +256,8 @@ async function loadVarga() {
   document.getElementById('chartTitle').textContent = d.label || ('D-'+d.factor);
   document.getElementById('chartSubject').textContent = subjectLine(fd);
   document.getElementById('ascLine').textContent =
-    'Ascendant: ' + (d.ascendant_sign_name || '?');
+    'Ascendant: ' + (d.ascendant_sign_name || '?') +
+    (d.ayanamsa ? '  ·  Ayanamsa: ' + d.ayanamsa : '');
 
   const g = document.getElementById('chartGrid');
   g.innerHTML = '';
@@ -354,11 +363,30 @@ async function populateVargaOptions() {
   } catch (_) { /* keep fallback options */ }
 }
 
+async function populateAyanamsaOptions() {
+  try {
+    const r = await fetch('/api/ayanamsa_list');
+    if (!r.ok) return;
+    const data = await r.json();
+    const sel = document.getElementById('ayanamsaSelect');
+    const current = sel.value || data.default;
+    sel.innerHTML = '';
+    data.modes.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = m.replace(/_/g, ' ').replace(/\w\S*/g, s => s[0]+s.slice(1).toLowerCase());
+      if (m === current) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  } catch (_) { /* keep fallback */ }
+}
+
 document.getElementById('panchButton').addEventListener('click', loadPanchangam);
 document.getElementById('chartButton').addEventListener('click', loadVarga);
 document.getElementById('bhavaButton').addEventListener('click', loadBhava);
 document.getElementById('dashaButton').addEventListener('click', loadDasha);
 populateVargaOptions();
+populateAyanamsaOptions();
 
 // --- City autocomplete ---
 const cityInput = document.getElementById('cityInput');
