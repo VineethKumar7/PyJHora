@@ -688,29 +688,32 @@ TABS.forEach(t => {
 
 let lifeChartState = { slices: [], sliceDays: 30, labels: [], svgBaseW: 1000, explanations: {}, natal: null };
 
-function lifeChartClick(e) {
+function lifeChartSvgMeta() {
   const svg = document.querySelector('#lifeChartSvg svg');
-  if (!svg) return;
-  const rect = svg.getBoundingClientRect();
-  const z = rect.width / lifeChartState.svgBaseW;
-  const svgX = (e.clientX - rect.left) / z;
-  const leftPad = parseFloat(svg.dataset.leftPad || '70');
-  const plotW = parseFloat(svg.dataset.plotW || '918');
-  const totalDays = parseFloat(svg.dataset.totalDays || '36525');
-  const birthStr = svg.dataset.birthDate;
-  let frac = (svgX - leftPad) / plotW;
-  frac = Math.max(0, Math.min(1, frac));
-  const dayOffset = frac * totalDays;
-  const birth = new Date(birthStr + 'T00:00:00Z');
+  if (!svg) return null;
+  return {
+    svg,
+    leftPad: parseFloat(svg.dataset.leftPad || '70'),
+    plotW: parseFloat(svg.dataset.plotW || '918'),
+    totalDays: parseFloat(svg.dataset.totalDays || '36525'),
+    birthStr: svg.dataset.birthDate,
+  };
+}
+
+function showLifeDetailAtDay(dayOffset) {
+  const m = lifeChartSvgMeta();
+  if (!m || !m.birthStr) return false;
+  dayOffset = Math.max(0, Math.min(m.totalDays, dayOffset));
+  const birth = new Date(m.birthStr + 'T00:00:00Z');
   const at = new Date(birth.getTime() + dayOffset * 86400000);
   const sliceIdx = Math.min(lifeChartState.slices.length - 1,
     Math.max(0, Math.floor(dayOffset / lifeChartState.sliceDays)));
   const s = lifeChartState.slices[sliceIdx] || [];
-  if (s.length < 5) return;
+  if (s.length < 5) return false;
   const key = s[4];
   const ex = lifeChartState.explanations[key];
   const box = document.getElementById('lifeChartDetail');
-  if (!ex) { box.classList.add('hidden'); return; }
+  if (!ex) { box.classList.add('hidden'); return false; }
   const dateStr = formatDate(at);
   const ageYears = (dayOffset / 365.25).toFixed(1);
   const renderReasons = (arr) => arr.length
@@ -731,6 +734,48 @@ function lifeChartClick(e) {
         (ex.career >= 0 ? '+' : '') + ex.career + '</div>' + renderReasons(ex.career_reasons) + '</div>' +
     '</div>';
   box.classList.remove('hidden');
+  return true;
+}
+
+function positionLifeCursorAtDay(dayOffset, { scroll = false } = {}) {
+  const m = lifeChartSvgMeta();
+  if (!m) return;
+  const container = document.getElementById('lifeChartSvg');
+  const cur = document.getElementById('lifeChartCursor');
+  if (!cur) return;
+  const rect = m.svg.getBoundingClientRect();
+  const z = rect.width / lifeChartState.svgBaseW;
+  const svgX = m.leftPad + (dayOffset / m.totalDays) * m.plotW;
+  const pxFromSvgLeft = svgX * z;
+  cur.style.left = pxFromSvgLeft + 'px';
+  cur.classList.remove('hidden');
+  if (scroll) {
+    const containerW = container.clientWidth;
+    container.scrollLeft = Math.max(0, pxFromSvgLeft - containerW / 2);
+  }
+}
+
+function openLifeChartToday() {
+  const m = lifeChartSvgMeta();
+  if (!m || !m.birthStr) return;
+  const birth = new Date(m.birthStr + 'T00:00:00Z');
+  const today = new Date();
+  const dayOffset = Math.max(0, (today.getTime() - birth.getTime()) / 86400000);
+  showLifeDetailAtDay(dayOffset);
+  positionLifeCursorAtDay(dayOffset, { scroll: true });
+}
+
+function lifeChartClick(e) {
+  const m = lifeChartSvgMeta();
+  if (!m) return;
+  const rect = m.svg.getBoundingClientRect();
+  const z = rect.width / lifeChartState.svgBaseW;
+  const svgX = (e.clientX - rect.left) / z;
+  let frac = (svgX - m.leftPad) / m.plotW;
+  frac = Math.max(0, Math.min(1, frac));
+  const dayOffset = frac * m.totalDays;
+  showLifeDetailAtDay(dayOffset);
+  positionLifeCursorAtDay(dayOffset);
 }
 
 function renderNatalSummary() {
@@ -855,6 +900,8 @@ async function loadLifeChart() {
     document.getElementById('lifeChartDetail').classList.add('hidden');
     document.getElementById('lifeChartOut').classList.remove('hidden');
     applyLifeZoom();
+    // Auto-open today's slice so the user sees the current period first
+    requestAnimationFrame(() => openLifeChartToday());
   } finally {
     btn.disabled = false;
     btn.textContent = oldLabel;
