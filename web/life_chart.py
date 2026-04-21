@@ -1,6 +1,6 @@
 """Life Predictions Chart — layered Vedic scoring engine.
 
-Scope: Marriage + Career (v2, 3-layer formula, range -10..+10).
+Scope: Marriage + Career + Finance (v2, 3-layer formula, range -10..+10).
 
 Layers (classical Parashari):
   L1 — Natal potential          (±3)   topic house lord + karaka + aspects received
@@ -390,6 +390,111 @@ def score_career(natal: dict, md_lord: int, ad_lord: int) -> Tuple[float, List[s
     return total, reasons
 
 
+def _gains_extension(natal: dict, weight_lord: float = 0.5,
+                      weight_aspect: float = 0.3) -> Tuple[float, List[str]]:
+    """Finance-only bonus from 11th house (Labha Sthana = gains).
+
+    Adds:
+      • 11th lord's placement (lean + dignity) × functional mult × weight_lord
+      • Full drishti received by 11th house from any graha × weight_aspect
+    """
+    planets = natal["planets"]
+    nature = natal["functional"]
+    lord_11 = natal["house_lord"][11]
+    sign_11 = natal["house_sign"][11]
+    info = planets.get(lord_11)
+
+    raw = 0.0
+    reasons: List[str] = []
+
+    if info:
+        lean = _house_lean(info["house"])
+        dign = _dignity_bonus(natal, lord_11)
+        mult = _mult(nature, lord_11)
+        contrib = (lean + dign) * mult * weight_lord
+        if contrib:
+            raw += contrib
+            reasons.append(
+                f"{_name(lord_11)} (11th lord, Labha/gains) in {_ORDINAL[info['house']]}"
+                f" [{nature[lord_11][0]} ×{mult:+.1f}, {contrib:+.1f}]"
+            )
+
+    for p in planets_aspecting_sign(natal, sign_11):
+        mult = _mult(nature, p)
+        if mult == 0:
+            continue
+        contrib = weight_aspect * mult
+        raw += contrib
+        p_info = planets[p]
+        aspn = _aspect_number(p, p_info["sign"], sign_11)
+        reasons.append(
+            f"{_name(p)} in {_ORDINAL[p_info['house']]} ({SIGN_NAMES[p_info['sign']]}) "
+            f"aspects 11th/gains ({SIGN_NAMES[sign_11]}) via {_ORDINAL[aspn]} drishti "
+            f"[{contrib:+.1f}]"
+        )
+
+    return raw, reasons
+
+
+def _gains_dasa_bonus(natal: dict, md_lord: int, ad_lord: int) -> Tuple[float, List[str]]:
+    """If MD or AD is 11th lord, they activate gains during the period."""
+    lord_11 = natal["house_lord"][11]
+    planets = natal["planets"]
+    nature = natal["functional"]
+    info = planets.get(lord_11)
+    if not info:
+        return 0.0, []
+
+    mult = _mult(nature, lord_11)
+    base = (_house_lean(info["house"]) + _dignity_bonus(natal, lord_11)) * mult
+    reasons: List[str] = []
+    raw = 0.0
+
+    if md_lord == lord_11:
+        amp = 1.0 if base >= 0 else -1.0
+        contrib = base + amp
+        raw += contrib
+        reasons.append(
+            f"MD = 11th lord {_name(lord_11)} in {_ORDINAL[info['house']]}"
+            f" [{nature[lord_11][0]} ×{mult:+.1f}, {contrib:+.1f}]"
+        )
+    elif ad_lord == lord_11:
+        amp = 0.5 if base >= 0 else -0.5
+        contrib = (base + amp) * 0.5
+        raw += contrib
+        reasons.append(
+            f"AD = 11th lord {_name(lord_11)} in {_ORDINAL[info['house']]}"
+            f" [{nature[lord_11][0]} ×{mult:+.1f}, {contrib:+.1f}]"
+        )
+
+    return raw, reasons
+
+
+def score_finance(natal: dict, md_lord: int, ad_lord: int) -> Tuple[float, List[str]]:
+    """Natal + Dasa combined score for finance.
+
+    Primary topic:  2nd house (Dhana Sthana — accumulated wealth/savings).
+    Karaka:         Jupiter (Dhana karaka).
+    Secondary:      11th house (Labha Sthana — income/gains), weighted 0.5.
+
+    Mercury (trade) and Venus (comforts) influence the chart through the
+    drishti walk inside _natal_layer when they aspect the 2nd house or Jupiter.
+    """
+    l1_base, r1_base = _natal_layer(natal, topic_house=2, karaka=JUPITER)
+    l1_gains, r1_gains = _gains_extension(natal)
+    l1 = _clamp(l1_base + l1_gains, -3.5, 3.5)
+
+    l3_base, r3_base = _dasa_layer(natal, 2, JUPITER, md_lord, ad_lord)
+    l3_gains, r3_gains = _gains_dasa_bonus(natal, md_lord, ad_lord)
+    l3 = _clamp(l3_base + l3_gains, -4.5, 4.5)
+
+    total = _clamp(l1 + l3, -7.0, 7.0)
+    reasons = [f"[Natal {l1:+.1f}] " + r for r in (r1_base + r1_gains)] + \
+              [f"[Dasa {l3:+.1f}] " + r for r in (r3_base + r3_gains)]
+    reasons.insert(0, f"Natal {l1:+.1f} + Dasa {l3:+.1f} = {total:+.1f}")
+    return total, reasons
+
+
 def BAD_HOUSES_OCCUPANTS(natal: dict) -> set:
     """Set of planets sitting in 6/8/12."""
     return {p for p, v in natal["planets"].items() if v["house"] in BAD_HOUSES}
@@ -489,6 +594,40 @@ def score_career_transit(natal: dict, transit: dict) -> Tuple[float, List[str]]:
     return _transit_topic_score(natal, transit, topic_house=10, karaka=SUN)
 
 
+def score_finance_transit(natal: dict, transit: dict) -> Tuple[float, List[str]]:
+    """Transit window for finance — 2nd house + Jupiter karaka + 11th gains."""
+    base, reasons = _transit_topic_score(natal, transit, topic_house=2, karaka=JUPITER)
+
+    # Add a smaller weight for transit aspects on the 11th (Labha) house.
+    planets = natal["planets"]
+    nature = natal["functional"]
+    sign_11 = natal["house_sign"][11]
+    asc = natal["asc_sign"]
+
+    extra = 0.0
+    for p in (JUPITER, SATURN, RAHU, KETU):
+        t_sign = transit.get(p)
+        if t_sign is None:
+            continue
+        mult = _mult(nature, p)
+        if mult == 0:
+            continue
+        hit_signs = aspected_signs(p, t_sign) | {t_sign}
+        if sign_11 in hit_signs:
+            contrib = 0.3 * mult
+            extra += contrib
+            t_house = _house_from(asc, t_sign)
+            aspn = _aspect_number(p, t_sign, sign_11)
+            aspect_desc = "conjunction" if t_sign == sign_11 else (
+                f"{_ORDINAL[aspn]} drishti" if aspn else "aspect")
+            reasons.append(
+                f"Transit {_name(p)} in {_ORDINAL[t_house]} ({SIGN_NAMES[t_sign]}) "
+                f"{aspect_desc} 11th/gains ({SIGN_NAMES[sign_11]}) [{contrib:+.1f}]"
+            )
+
+    return _clamp(base + extra, -3.5, 3.5), reasons
+
+
 def _name(pid: int) -> str:
     return ["Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn", "Rahu", "Ketu"][pid]
 
@@ -525,8 +664,9 @@ def build_timeline(jd: float, place, years: int = 100, slice_days: int = 30) -> 
         if base_key not in base_cache:
             m_base, m_base_r = score_marriage(natal, md, ad)
             c_base, c_base_r = score_career(natal, md, ad)
-            base_cache[base_key] = (m_base, m_base_r, c_base, c_base_r)
-        m_base, m_base_r, c_base, c_base_r = base_cache[base_key]
+            f_base, f_base_r = score_finance(natal, md, ad)
+            base_cache[base_key] = (m_base, m_base_r, c_base, c_base_r, f_base, f_base_r)
+        m_base, m_base_r, c_base, c_base_r, f_base, f_base_r = base_cache[base_key]
 
         t = transit_signs(cur, place)
         t_sig = (t.get(JUPITER), t.get(SATURN), t.get(RAHU), t.get(KETU))
@@ -535,8 +675,10 @@ def build_timeline(jd: float, place, years: int = 100, slice_days: int = 30) -> 
         if full_key not in explanations:
             m_t, m_t_r = score_marriage_transit(natal, t)
             c_t, c_t_r = score_career_transit(natal, t)
+            f_t, f_t_r = score_finance_transit(natal, t)
             m_total = _clamp(m_base + m_t, -10.0, 10.0)
             c_total = _clamp(c_base + c_t, -10.0, 10.0)
+            f_total = _clamp(f_base + f_t, -10.0, 10.0)
             explanations[full_key] = {
                 "md": md, "ad": ad,
                 "md_name": _name(md), "ad_name": _name(ad),
@@ -544,6 +686,8 @@ def build_timeline(jd: float, place, years: int = 100, slice_days: int = 30) -> 
                 "marriage_reasons": m_base_r + m_t_r,
                 "career": round(c_total, 1),
                 "career_reasons": c_base_r + c_t_r,
+                "finance": round(f_total, 1),
+                "finance_reasons": f_base_r + f_t_r,
                 "transit": {
                     "jupiter": t.get(JUPITER),
                     "saturn": t.get(SATURN),
@@ -559,6 +703,7 @@ def build_timeline(jd: float, place, years: int = 100, slice_days: int = 30) -> 
             "key": full_key,
             "marriage": e["marriage"],
             "career": e["career"],
+            "finance": e["finance"],
         })
         cur += slice_days
 
@@ -580,10 +725,14 @@ def natal_summary(natal: dict) -> dict:
         return {"house": v["house"], "sign": v["sign"], "dignity": dignity}
     return {
         "ascendant": asc,
+        "lord_2": _name(natal["house_lord"][2]),
+        "lord_2_house": p.get(natal["house_lord"][2], {}).get("house"),
         "lord_7": _name(natal["house_lord"][7]),
         "lord_7_house": p.get(natal["house_lord"][7], {}).get("house"),
         "lord_10": _name(natal["house_lord"][10]),
         "lord_10_house": p.get(natal["house_lord"][10], {}).get("house"),
+        "lord_11": _name(natal["house_lord"][11]),
+        "lord_11_house": p.get(natal["house_lord"][11], {}).get("house"),
         "venus": describe(VENUS),
         "jupiter": describe(JUPITER),
         "sun": describe(SUN),
@@ -591,6 +740,8 @@ def natal_summary(natal: dict) -> dict:
         "mercury": describe(MERCURY),
         "seventh_occupants": [_name(pid) for pid, v in p.items() if v["house"] == 7],
         "tenth_occupants": [_name(pid) for pid, v in p.items() if v["house"] == 10],
+        "second_occupants": [_name(pid) for pid, v in p.items() if v["house"] == 2],
+        "eleventh_occupants": [_name(pid) for pid, v in p.items() if v["house"] == 11],
     }
 
 
@@ -631,7 +782,7 @@ def render_svg(timeline: dict, subject: str = "") -> str:
     row_h = 42
     row_gap = 6
     axis_h = 18
-    rows = [("Marriage", "marriage"), ("Career", "career")]
+    rows = [("Marriage", "marriage"), ("Career", "career"), ("Finance", "finance")]
     height = top_pad + len(rows) * (row_h + row_gap) + axis_h + 14
 
     plot_w = width - left_pad - right_pad

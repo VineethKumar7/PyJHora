@@ -446,7 +446,7 @@ async def life_chart_endpoint(
     subject = f"{name or 'Subject'} · {date} {time}"
     svg = life_chart.render_svg(timeline, subject=subject)
     compact = [
-        [s["md"], s["ad"], s["marriage"], s["career"], s["key"]]
+        [s["md"], s["ad"], s["marriage"], s["career"], s["finance"], s["key"]]
         for s in timeline["slices"]
     ]
     return JSONResponse({
