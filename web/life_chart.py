@@ -92,17 +92,24 @@ def compute_functional_nature(asc_sign: int) -> Dict[int, Tuple[str, float]]:
             nature[planet] = ("neutral", 0.5)
             continue
 
+        owns_asc = 1 in houses
         non_asc_houses = houses - {1}
         is_kendra = bool(non_asc_houses & (KENDRA_HOUSES - {1}))
         is_trikona = bool(non_asc_houses & (TRIKONA_HOUSES - {1}))
         is_dusthana = bool(houses & DUSTHANA_HOUSES)
 
-        # Classical rule: trikona lordship overrides dusthana lordship.
-        # Yoga karaka (kendra + trikona) always wins.
-        if is_kendra and is_trikona:
+        # Classical priorities:
+        #   1. kendra + trikona → yoga karaka (overrides dusthana)
+        #   2. trikona lordship overrides dusthana
+        #   3. lagna lord is never purely malefic (asc is kendra + trikona)
+        if (is_kendra and is_trikona) or (owns_asc and is_trikona):
             nature[planet] = ("yoga_karaka", 1.5)
         elif is_trikona:
             nature[planet] = ("benefic", 1.0)
+        elif owns_asc and is_dusthana:
+            nature[planet] = ("neutral", 0.5)  # lagna lord + dusthana = mixed
+        elif owns_asc:
+            nature[planet] = ("benefic", 1.0)  # lagna lord alone = benefic
         elif is_dusthana:
             nature[planet] = ("malefic", -1.0)
         elif is_kendra:
