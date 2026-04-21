@@ -1029,8 +1029,8 @@ function lifeChartWheel(e) {
   const anchorPx = e.clientX - container.getBoundingClientRect().left + container.scrollLeft;
   const prevWidth = (document.querySelector('#lifeChartSvg svg') || {}).clientWidth || 1;
   const anchorFrac = anchorPx / prevWidth;
-  const factor = e.deltaY > 0 ? 0.9 : 1.1;
-  lifeChartXStretch = Math.max(0.3, Math.min(12, lifeChartXStretch * factor));
+  const factor = e.deltaY > 0 ? 0.8 : 1.25;
+  lifeChartXStretch = Math.max(0.3, Math.min(2500, lifeChartXStretch * factor));
   const z = parseFloat(document.getElementById('lifeZoom').value) || 1;
   applyLifeTransforms(z, lifeChartXStretch);
   const newSvg = document.querySelector('#lifeChartSvg svg');
