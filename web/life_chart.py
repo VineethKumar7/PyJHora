@@ -1,20 +1,19 @@
-"""Life Predictions Chart — simplified VedAstro-style engine.
+"""Life Predictions Chart — layered Vedic scoring engine.
 
-Scope: Marriage + Career only (v1).
+Scope: Marriage + Career (v2, 3-layer formula, range -10..+10).
 
-Approach:
-  1. Analyse the natal chart once (ascendant, planet→house, house lords, dignities)
-  2. Walk birth → +100y in time slices; for each slice find active Mahadasha
-     and Antardasha lords and score the two topics as -3..+3
-  3. Bucket the score into {Good, Neutral, Bad} = green/white/red
+Layers (classical Parashari):
+  L1 — Natal potential          (±3)   topic house lord + karaka + aspects received
+  L2 — Functional B/M multiplier        applied inline to every L1/L3 contribution
+  L3 — Dasa period              (±4)   MD placement biases the whole Mahadasha
+  L4 — Transit window           (±3)   aspects of transiting Ju/Sa/Ra/Ke
 
-Rule descriptions are drawn from classical Vedic astrology (and align with
-VedAstro's MIT-licensed rule set).
+Total clamped to [-10, +10].
 """
 
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from jhora import const, utils
 from jhora.horoscope.chart import charts
@@ -33,6 +32,94 @@ EXALT_SIGN = {SUN: 0, MOON: 1, MARS: 9, MERCURY: 5, JUPITER: 3,
 DEBIL_SIGN = {p: (s + 6) % 12 for p, s in EXALT_SIGN.items()}
 BENEFICS = {JUPITER, VENUS, MERCURY, MOON}
 MALEFICS = {SUN, MARS, SATURN, RAHU, KETU}
+
+# Graha drishti — full-strength aspects (houses from the planet, self=1).
+# Every graha aspects its 7th. Ma/Ju/Sa have special aspects. Ra/Ke treated
+# as Jupiter-like (most common modern convention, BV Raman / KN Rao).
+SPECIAL_ASPECTS = {
+    SUN: (7,),  MOON: (7,), MERCURY: (7,), VENUS: (7,),
+    MARS: (4, 7, 8),
+    JUPITER: (5, 7, 9),
+    SATURN: (3, 7, 10),
+    RAHU: (5, 7, 9),
+    KETU: (5, 7, 9),
+}
+
+KENDRA_HOUSES = {1, 4, 7, 10}
+TRIKONA_HOUSES = {1, 5, 9}
+DUSTHANA_HOUSES = {6, 8, 12}
+UPACHAYA_HOUSES = {3, 6, 10, 11}
+
+
+def aspected_signs(planet: int, from_sign: int) -> set:
+    """Signs aspected by `planet` when placed in `from_sign` (full drishti only)."""
+    return {(from_sign + (h - 1)) % 12 for h in SPECIAL_ASPECTS[planet]}
+
+
+def planets_aspecting_sign(natal: dict, target_sign: int) -> set:
+    """Set of planet IDs whose natal placement throws full drishti on target_sign."""
+    out = set()
+    for p, info in natal["planets"].items():
+        if target_sign in aspected_signs(p, info["sign"]):
+            out.add(p)
+    return out
+
+
+def compute_functional_nature(asc_sign: int) -> Dict[int, Tuple[str, float]]:
+    """Functional nature per graha for a given lagna.
+
+    Returns {planet: (label, multiplier)} where multiplier is applied to
+    every Layer-1 and Layer-3 contribution of that planet:
+        +1.5  yoga karaka   (kendra+trikona lord)
+        +1.0  functional benefic (pure trikona lord, or natural malefic as
+              pure kendra lord)
+        +0.5  neutral (natural benefic as kendra lord — kendradhipati dosha,
+              or sole 2/11 lord, etc.)
+        -1.0  functional malefic (dusthana lord — 6/8/12 — or Ra/Ke default)
+
+    Simplified Parashari classification. Rahu/Ketu default to malefic; refine
+    later per dispositor if needed.
+    """
+    lordships: Dict[int, set] = {}
+    for h in range(1, 13):
+        lord = SIGN_LORD[(asc_sign + h - 1) % 12]
+        lordships.setdefault(lord, set()).add(h)
+
+    nature: Dict[int, Tuple[str, float]] = {}
+    for planet in (SUN, MOON, MARS, MERCURY, JUPITER, VENUS, SATURN):
+        houses = lordships.get(planet, set())
+        if not houses:
+            nature[planet] = ("neutral", 0.5)
+            continue
+
+        non_asc_houses = houses - {1}
+        is_kendra = bool(non_asc_houses & (KENDRA_HOUSES - {1}))
+        is_trikona = bool(non_asc_houses & (TRIKONA_HOUSES - {1}))
+        is_dusthana = bool(houses & DUSTHANA_HOUSES)
+
+        # Classical rule: trikona lordship overrides dusthana lordship.
+        # Yoga karaka (kendra + trikona) always wins.
+        if is_kendra and is_trikona:
+            nature[planet] = ("yoga_karaka", 1.5)
+        elif is_trikona:
+            nature[planet] = ("benefic", 1.0)
+        elif is_dusthana:
+            nature[planet] = ("malefic", -1.0)
+        elif is_kendra:
+            if planet in {JUPITER, VENUS, MERCURY, MOON}:
+                nature[planet] = ("neutral", 0.5)  # kendradhipati dosha
+            else:
+                nature[planet] = ("benefic", 1.0)  # natural malefic, kendra lord
+        else:
+            nature[planet] = ("neutral", 0.5)
+
+    nature[RAHU] = ("malefic", -1.0)
+    nature[KETU] = ("malefic", -1.0)
+    return nature
+
+
+def _mult(nature: Dict[int, Tuple[str, float]], planet: int) -> float:
+    return nature.get(planet, ("neutral", 0.5))[1]
 
 
 _SWE_PLANETS = {
@@ -56,8 +143,11 @@ def analyse_natal(jd: float, place) -> dict:
         house = ((sign_idx - asc_sign) % 12) + 1
         planets[token] = {"sign": sign_idx, "long": deg, "house": house}
     house_lord = {h: SIGN_LORD[(asc_sign + h - 1) % 12] for h in range(1, 13)}
+    house_sign = {h: (asc_sign + h - 1) % 12 for h in range(1, 13)}
     return {"asc_sign": asc_sign, "planets": planets, "house_lord": house_lord,
-            "moon_sign": planets.get(MOON, {}).get("sign", asc_sign)}
+            "house_sign": house_sign,
+            "moon_sign": planets.get(MOON, {}).get("sign", asc_sign),
+            "functional": compute_functional_nature(asc_sign)}
 
 
 def transit_signs(jd: float, place, planets=(JUPITER, SATURN, RAHU, KETU)) -> dict:
@@ -101,132 +191,172 @@ GOOD_HOUSES = {1, 4, 5, 9, 10, 11}
 BAD_HOUSES = {6, 8, 12}
 
 
-def score_marriage(natal: dict, md_lord: int, ad_lord: int) -> Tuple[int, List[str]]:
-    """Score -3..+3. Returns (score, reasons)."""
-    score = 0
-    reasons = []
-
-    lord7 = natal["house_lord"][7]
-    lord7_house = natal["planets"].get(lord7, {}).get("house")
-    venus = natal["planets"].get(VENUS, {})
-    jupiter = natal["planets"].get(JUPITER, {})
-    seventh_occupants = [p for p, v in natal["planets"].items() if v["house"] == 7]
-
-    if lord7_house in GOOD_HOUSES:
-        score += 1
-        reasons.append(f"7th lord in {lord7_house}th (well placed)")
-    elif lord7_house in BAD_HOUSES:
-        score -= 1
-        reasons.append(f"7th lord in {lord7_house}th (afflicted)")
-
-    if venus.get("house") in {1, 4, 5, 7, 11}:
-        score += 1
-        reasons.append("Venus well placed for love")
-    if venus.get("house") in BAD_HOUSES:
-        score -= 1
-        reasons.append("Venus afflicted")
-    score += _dignity_bonus(natal, VENUS)
-
-    if MARS in seventh_occupants:
-        score -= 1
-        reasons.append("Mars in 7th (Kuja dosha)")
-    if SATURN in seventh_occupants:
-        score -= 1
-        reasons.append("Saturn in 7th (delays)")
-    if RAHU in seventh_occupants or KETU in seventh_occupants:
-        score -= 1
-        reasons.append("Rahu/Ketu in 7th")
-    if JUPITER in seventh_occupants or VENUS in seventh_occupants:
-        score += 1
-        reasons.append("Benefic in 7th")
-
-    if md_lord == lord7:
-        score += 2
-        reasons.append("Mahadasha of 7th lord")
-    if md_lord == VENUS:
-        score += 1
-        reasons.append("Venus Mahadasha")
-    if md_lord == JUPITER and jupiter.get("house") in GOOD_HOUSES:
-        score += 1
-        reasons.append("Jupiter Mahadasha (Jupiter well placed)")
-    if md_lord in {SATURN, RAHU, KETU} and md_lord in seventh_occupants:
-        score -= 1
-        reasons.append(f"{_name(md_lord)} Mahadasha (in 7th)")
-
-    if ad_lord == lord7:
-        score += 1
-        reasons.append("Antardasha of 7th lord")
-    if ad_lord == VENUS:
-        score += 1
-        reasons.append("Venus Antardasha")
-    if ad_lord in {SATURN, RAHU} and ad_lord in seventh_occupants:
-        score -= 1
-        reasons.append(f"{_name(ad_lord)} Antardasha (in 7th)")
-
-    return max(-3, min(3, score)), reasons
+def _house_lean(house: int) -> int:
+    """+1 for good houses, -1 for dusthanas, 0 otherwise."""
+    if house in GOOD_HOUSES:
+        return 1
+    if house in BAD_HOUSES:
+        return -1
+    return 0
 
 
-def score_career(natal: dict, md_lord: int, ad_lord: int) -> Tuple[int, List[str]]:
-    score = 0
-    reasons = []
+def _clamp(v: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, v))
 
-    lord10 = natal["house_lord"][10]
-    lord10_house = natal["planets"].get(lord10, {}).get("house")
-    sun = natal["planets"].get(SUN, {})
-    saturn = natal["planets"].get(SATURN, {})
-    mercury = natal["planets"].get(MERCURY, {})
-    tenth_occupants = [p for p, v in natal["planets"].items() if v["house"] == 10]
 
-    if lord10_house in GOOD_HOUSES:
-        score += 1
-        reasons.append(f"10th lord in {lord10_house}th (well placed)")
-    elif lord10_house in BAD_HOUSES:
-        score -= 1
-        reasons.append(f"10th lord in {lord10_house}th (afflicted)")
+def _natal_layer(natal: dict, topic_house: int, karaka: int) -> Tuple[float, List[str]]:
+    """Layer 1 — Natal potential for a topic house + natural karaka.
 
-    if sun.get("house") in {1, 9, 10, 11}:
-        score += 1
-        reasons.append("Sun in Kendra/Trikona (strong authority)")
-    score += _dignity_bonus(natal, SUN)
+    Contributions (each × functional multiplier of the contributing planet):
+      • Topic house lord placement (house-lean ±1) + dignity
+      • Karaka's placement (house-lean ±1) + dignity
+      • Aspects received by topic house: benefic full drishti → +, malefic → −
+      • Aspects received by karaka's sign: same
+    Clamped to ±3.
+    """
+    planets = natal["planets"]
+    nature = natal["functional"]
+    lord = natal["house_lord"][topic_house]
+    lord_info = planets.get(lord)
+    karaka_info = planets.get(karaka)
+    topic_sign = natal["house_sign"][topic_house]
 
-    if saturn.get("house") == 10:
-        score += 1
-        reasons.append("Saturn in 10th (disciplined career)")
-    if mercury.get("house") in {1, 2, 5, 10, 11}:
-        score += 1
-        reasons.append("Mercury well placed (commerce/skill)")
+    raw = 0.0
+    reasons: List[str] = []
 
-    benefics_in_tenth = [p for p in tenth_occupants if p in BENEFICS]
-    if benefics_in_tenth:
-        score += 1
-        reasons.append("Benefic in 10th")
+    if lord_info:
+        lean = _house_lean(lord_info["house"])
+        dign = _dignity_bonus(natal, lord)
+        mult = _mult(nature, lord)
+        contrib = (lean + dign) * mult
+        if contrib:
+            raw += contrib
+            reasons.append(
+                f"{_name(lord)} ({topic_house}th lord) in {lord_info['house']}th"
+                f" [{nature[lord][0]} ×{mult:+.1f}, {contrib:+.1f}]"
+            )
 
-    if md_lord == lord10:
-        score += 2
-        reasons.append("Mahadasha of 10th lord")
-    if md_lord == SUN and sun.get("house") in GOOD_HOUSES:
-        score += 1
-        reasons.append("Sun Mahadasha (well placed)")
-    if md_lord == SATURN and saturn.get("house") in {3, 6, 10, 11}:
-        score += 1
-        reasons.append("Saturn Mahadasha (Upachaya)")
-    if md_lord == MERCURY and mercury.get("house") in GOOD_HOUSES:
-        score += 1
-        reasons.append("Mercury Mahadasha (skill / business)")
-    if md_lord in BAD_HOUSES_OCCUPANTS(natal):
-        score -= 1
-        reasons.append(f"{_name(md_lord)} Mahadasha (in dusthana)")
+    if karaka_info:
+        lean = _house_lean(karaka_info["house"])
+        dign = _dignity_bonus(natal, karaka)
+        mult = _mult(nature, karaka)
+        contrib = (lean + dign) * mult
+        if contrib:
+            raw += contrib
+            reasons.append(
+                f"{_name(karaka)} (karaka) in {karaka_info['house']}th"
+                f" [{nature[karaka][0]} ×{mult:+.1f}, {contrib:+.1f}]"
+            )
 
-    if ad_lord == lord10:
-        score += 1
-        reasons.append("Antardasha of 10th lord")
-    if ad_lord == SUN:
-        score += 0
-    if ad_lord in {RAHU, KETU} and ad_lord in tenth_occupants:
-        score -= 1
-        reasons.append(f"{_name(ad_lord)} Antardasha (in 10th)")
+    # Aspects received by topic house
+    for p in planets_aspecting_sign(natal, topic_sign):
+        mult = _mult(nature, p)
+        if mult == 0:
+            continue
+        contrib = 0.5 * mult
+        raw += contrib
+        reasons.append(f"{_name(p)} aspects {topic_house}th [{contrib:+.1f}]")
 
-    return max(-3, min(3, score)), reasons
+    # Aspects received by karaka's sign
+    if karaka_info:
+        k_sign = karaka_info["sign"]
+        for p in planets_aspecting_sign(natal, k_sign):
+            if p == karaka:
+                continue
+            mult = _mult(nature, p)
+            if mult == 0:
+                continue
+            contrib = 0.3 * mult
+            raw += contrib
+            reasons.append(
+                f"{_name(p)} aspects {_name(karaka)} (karaka) [{contrib:+.1f}]"
+            )
+
+    return _clamp(raw, -3.0, 3.0), reasons
+
+
+def _dasa_layer(
+    natal: dict, topic_house: int, karaka: int, md_lord: int, ad_lord: int
+) -> Tuple[float, List[str]]:
+    """Layer 3 — Dasa period effect (±4).
+
+    MD planet's own placement × functional nature → period baseline.
+    If MD = topic house lord → amplify. If MD = karaka → amplify.
+    AD blends: weighted average of AD's own effect and MD baseline (MD weight 2, AD 1).
+    """
+    planets = natal["planets"]
+    nature = natal["functional"]
+    topic_lord = natal["house_lord"][topic_house]
+
+    def planet_baseline(p: int) -> Tuple[float, str]:
+        info = planets.get(p)
+        if not info:
+            return 0.0, ""
+        lean = _house_lean(info["house"])
+        dign = _dignity_bonus(natal, p)
+        mult = _mult(nature, p)
+        base = (lean + dign) * mult
+        amp = 0.0
+        note = []
+        if p == topic_lord:
+            amp += 2.5 if base >= 0 else -2.5
+            note.append(f"= {topic_house}th lord")
+        if p == karaka:
+            amp += 1.5 if base >= 0 else -1.5
+            note.append("= karaka")
+        total = base + amp
+        suffix = f" [{', '.join(note)}]" if note else ""
+        return total, (
+            f"{_name(p)} in {info['house']}th "
+            f"[{nature[p][0]} ×{mult:+.1f}, base {base:+.1f}{suffix}]"
+        )
+
+    md_val, md_desc = planet_baseline(md_lord)
+    ad_val, ad_desc = planet_baseline(ad_lord)
+
+    # AD blend: weighted avg (MD 2, AD 1). If AD == MD, just the MD value.
+    if md_lord == ad_lord:
+        combined = md_val
+    else:
+        combined = (2 * md_val + ad_val) / 3.0
+
+    reasons: List[str] = []
+    if md_desc:
+        reasons.append(f"MD {md_desc}")
+    if ad_desc and md_lord != ad_lord:
+        reasons.append(f"AD {ad_desc}")
+
+    return _clamp(combined, -4.0, 4.0), reasons
+
+
+def score_marriage(natal: dict, md_lord: int, ad_lord: int) -> Tuple[float, List[str]]:
+    """Natal + Dasa combined score for marriage (7th house, Venus karaka).
+
+    Returns (score, reasons) with score clamped to [-7, +7].
+    """
+    l1, r1 = _natal_layer(natal, topic_house=7, karaka=VENUS)
+    l3, r3 = _dasa_layer(natal, 7, VENUS, md_lord, ad_lord)
+    total = _clamp(l1 + l3, -7.0, 7.0)
+    reasons = [f"[Natal {l1:+.1f}] " + r for r in r1] + \
+              [f"[Dasa {l3:+.1f}] " + r for r in r3]
+    reasons.insert(0, f"Natal {l1:+.1f} + Dasa {l3:+.1f} = {total:+.1f}")
+    return total, reasons
+
+
+def score_career(natal: dict, md_lord: int, ad_lord: int) -> Tuple[float, List[str]]:
+    """Natal + Dasa combined score for career (10th house, Sun karaka).
+
+    Saturn and Mercury are secondary karakas but we stick with Sun as the
+    primary per BPHS. The Layer-1 aspect walk catches Saturn/Mercury influence
+    via drishti anyway.
+    """
+    l1, r1 = _natal_layer(natal, topic_house=10, karaka=SUN)
+    l3, r3 = _dasa_layer(natal, 10, SUN, md_lord, ad_lord)
+    total = _clamp(l1 + l3, -7.0, 7.0)
+    reasons = [f"[Natal {l1:+.1f}] " + r for r in r1] + \
+              [f"[Dasa {l3:+.1f}] " + r for r in r3]
+    reasons.insert(0, f"Natal {l1:+.1f} + Dasa {l3:+.1f} = {total:+.1f}")
+    return total, reasons
 
 
 def BAD_HOUSES_OCCUPANTS(natal: dict) -> set:
@@ -239,99 +369,74 @@ JUPITER_GOOD_FROM_MOON = {2, 5, 7, 9, 11}
 NODES_GOOD_FROM_MOON = {3, 6, 11}
 
 
-def score_marriage_transit(natal: dict, transit: dict) -> tuple:
-    """Return (score_delta, reasons) from transits. Layered on natal+dasha."""
-    score = 0
-    reasons = []
-    moon = natal["moon_sign"]
+def _transit_topic_score(
+    natal: dict, transit: dict, topic_house: int, karaka: int
+) -> Tuple[float, List[str]]:
+    """Layer 4 — Transit window (±3), aspect-aware.
+
+    For each slow transiting planet (Ju/Sa/Ra/Ke), count:
+      (a) aspect on topic house from asc
+      (b) aspect on topic house from Moon (gochara)
+      (c) aspect on natal karaka's sign
+    Each full-strength hit weights by the transiting planet's functional
+    nature for this lagna (×1.0 benefic, ×0.5 neutral, ×−1.0 malefic).
+    Conjunction (same sign) counts as a hit. Clamped to ±3.
+    """
+    planets = natal["planets"]
+    nature = natal["functional"]
     asc = natal["asc_sign"]
-    lord7 = natal["house_lord"][7]
-    lord7_sign = natal["planets"].get(lord7, {}).get("sign")
-    venus_sign = natal["planets"].get(VENUS, {}).get("sign")
+    moon = natal["moon_sign"]
+    topic_sign_asc = natal["house_sign"][topic_house]
+    topic_sign_moon = (moon + topic_house - 1) % 12
+    karaka_info = planets.get(karaka)
+    karaka_sign = karaka_info["sign"] if karaka_info else None
 
-    jup = transit.get(JUPITER)
-    sat = transit.get(SATURN)
-    rahu = transit.get(RAHU)
-    ketu = transit.get(KETU)
+    raw = 0.0
+    reasons: List[str] = []
 
-    if jup is not None:
-        if _house_from(moon, jup) in JUPITER_GOOD_FROM_MOON:
-            score += 1
-            reasons.append(f"Jupiter transit in {_house_from(moon, jup)}th from Moon (benefic gochara)")
-        if _house_from(asc, jup) == 7:
-            score += 1
-            reasons.append("Jupiter transiting 7th house")
-        if lord7_sign is not None and jup == lord7_sign:
-            score += 1
-            reasons.append("Jupiter transiting natal 7th lord")
-
-    if sat is not None:
-        if _house_from(asc, sat) == 7:
-            score -= 1
-            reasons.append("Saturn transiting 7th house (delays)")
-        if lord7_sign is not None and sat == lord7_sign:
-            score -= 1
-            reasons.append("Saturn transiting natal 7th lord")
-        sade_house = _house_from(moon, sat)
-        if sade_house in {12, 1, 2}:
-            score -= 1
-            reasons.append(f"Sade Sati (Saturn in {sade_house}th from Moon)")
-
-    for node, name in ((rahu, "Rahu"), (ketu, "Ketu")):
-        if node is None:
+    for p in (JUPITER, SATURN, RAHU, KETU):
+        t_sign = transit.get(p)
+        if t_sign is None:
             continue
-        if _house_from(asc, node) == 7:
-            score -= 1
-            reasons.append(f"{name} transiting 7th house")
-        if venus_sign is not None and node == venus_sign:
-            score -= 1
-            reasons.append(f"{name} conjunct natal Venus")
+        mult = _mult(nature, p)
+        if mult == 0:
+            continue
+        hit_signs = aspected_signs(p, t_sign) | {t_sign}  # include conjunction
 
-    return score, reasons
+        if topic_sign_asc in hit_signs:
+            contrib = 0.6 * mult
+            raw += contrib
+            reasons.append(
+                f"Transit {_name(p)} aspects {topic_house}th from asc [{contrib:+.1f}]"
+            )
+        if topic_sign_moon in hit_signs:
+            contrib = 0.4 * mult
+            raw += contrib
+            reasons.append(
+                f"Transit {_name(p)} aspects {topic_house}th from Moon [{contrib:+.1f}]"
+            )
+        if karaka_sign is not None and karaka_sign in hit_signs:
+            contrib = 0.4 * mult
+            raw += contrib
+            reasons.append(
+                f"Transit {_name(p)} aspects natal {_name(karaka)} [{contrib:+.1f}]"
+            )
 
-
-def score_career_transit(natal: dict, transit: dict) -> tuple:
-    score = 0
-    reasons = []
-    moon = natal["moon_sign"]
-    asc = natal["asc_sign"]
-    lord10 = natal["house_lord"][10]
-    lord10_sign = natal["planets"].get(lord10, {}).get("sign")
-
-    jup = transit.get(JUPITER)
+    # Named bonuses — Sade Sati (Saturn in 12/1/2 from Moon) preserved.
     sat = transit.get(SATURN)
-    rahu = transit.get(RAHU)
+    if sat is not None and _house_from(moon, sat) in {12, 1, 2}:
+        raw -= 0.5
+        reasons.append(f"Sade Sati (Saturn in {_house_from(moon, sat)}th from Moon) [-0.5]")
 
-    if jup is not None:
-        h_asc = _house_from(asc, jup)
-        if h_asc in {10, 11}:
-            score += 1
-            reasons.append(f"Jupiter transiting {h_asc}th (opportunity)")
-        if lord10_sign is not None and jup == lord10_sign:
-            score += 1
-            reasons.append("Jupiter transiting natal 10th lord")
-        if _house_from(moon, jup) in JUPITER_GOOD_FROM_MOON:
-            score += 0  # already counted for marriage; keep career neutral
-        else:
-            score -= 0
+    return _clamp(raw, -3.0, 3.0), reasons
 
-    if sat is not None:
-        sat_moon = _house_from(moon, sat)
-        if sat_moon in SATURN_GOOD_FROM_MOON:
-            score += 1
-            reasons.append(f"Saturn transit in {sat_moon}th from Moon (favourable gochara)")
-        if sat_moon in {12, 1, 2}:
-            score -= 1
-            reasons.append(f"Sade Sati (Saturn in {sat_moon}th from Moon)")
-        if _house_from(asc, sat) == 10:
-            score += 0  # Saturn in 10th is mixed — pressure, eventual reward
-            reasons.append("Saturn transiting 10th (discipline / pressure)")
 
-    if rahu is not None and lord10_sign is not None and rahu == lord10_sign:
-        score -= 1
-        reasons.append("Rahu transiting natal 10th lord")
+def score_marriage_transit(natal: dict, transit: dict) -> Tuple[float, List[str]]:
+    return _transit_topic_score(natal, transit, topic_house=7, karaka=VENUS)
 
-    return score, reasons
+
+def score_career_transit(natal: dict, transit: dict) -> Tuple[float, List[str]]:
+    return _transit_topic_score(natal, transit, topic_house=10, karaka=SUN)
 
 
 def _name(pid: int) -> str:
@@ -380,14 +485,14 @@ def build_timeline(jd: float, place, years: int = 100, slice_days: int = 30) -> 
         if full_key not in explanations:
             m_t, m_t_r = score_marriage_transit(natal, t)
             c_t, c_t_r = score_career_transit(natal, t)
-            m_total = max(-3, min(3, m_base + m_t))
-            c_total = max(-3, min(3, c_base + c_t))
+            m_total = _clamp(m_base + m_t, -10.0, 10.0)
+            c_total = _clamp(c_base + c_t, -10.0, 10.0)
             explanations[full_key] = {
                 "md": md, "ad": ad,
                 "md_name": _name(md), "ad_name": _name(ad),
-                "marriage": m_total,
+                "marriage": round(m_total, 1),
                 "marriage_reasons": m_base_r + m_t_r,
-                "career": c_total,
+                "career": round(c_total, 1),
                 "career_reasons": c_base_r + c_t_r,
                 "transit": {
                     "jupiter": t.get(JUPITER),
@@ -483,14 +588,16 @@ def render_svg(timeline: dict, subject: str = "") -> str:
     slice_days = (slices[1]["jd"] - slices[0]["jd"]) if len(slices) > 1 else 30
     slice_w = (slice_days / total_days) * plot_w
 
-    def color_for(score: int) -> str:
-        if score >= 2:
+    def color_for(score: float) -> str:
+        # Temporary 5-bucket binning for ±10 range. Real continuous HSL
+        # gradient comes with the UI pass (Layer-5 from the plan).
+        if score >= 5:
             return "#16a34a"
-        if score == 1:
+        if score >= 1:
             return "#86efac"
-        if score == 0:
+        if score > -1:
             return "#f5f5f4"
-        if score == -1:
+        if score > -5:
             return "#fca5a5"
         return "#dc2626"
 
