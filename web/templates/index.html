@@ -203,6 +203,7 @@
         <button type="button" id="yogaButton"      data-panel="yogaOut"      class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Yoga/Karana</button>
         <button type="button" id="muhurtaButton"   data-panel="muhurtaOut"   class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Muhurta</button>
         <button type="button" id="solarButton"     data-panel="solarOut"     class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Solar Cal</button>
+        <button type="button" id="rasiExplorerButton" data-panel="rasiExplorerOut" class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Rasi Explorer</button>
       </div>
       <div class="flex items-center gap-2 order-2 md:order-3">
         <label class="text-xs text-slate-500 hidden lg:inline" for="ayanamsaNav">Ayanamsa</label>
@@ -655,6 +656,25 @@
         </details>
         <div id="solarReading" class="mt-4 rounded border border-indigo-200 bg-indigo-50 p-4 text-sm"></div>
         <div id="solarCitations" class="mt-2 text-xs text-slate-500 italic"></div>
+      </div>
+
+      <div id="rasiExplorerOut" class="hidden bg-white rounded-lg shadow p-5">
+        <div class="flex items-baseline justify-between border-b pb-2 mb-3 flex-wrap gap-2">
+          <h2 class="font-semibold text-slate-700">Rasi Explorer</h2>
+          <span id="rasiExplorerSubject" class="text-xs text-slate-500"></span>
+        </div>
+        <p class="text-xs text-slate-500 mb-3">
+          Ch 2 — click any of the twelve signs to see every property the classical
+          texts attribute to it. Your <strong>Lagna / Moon / Sun</strong> rasis are
+          highlighted.
+        </p>
+        <div id="rasiExplorerGrid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-4"></div>
+        <div id="rasiExplorerDossier" class="rounded border border-slate-200 bg-slate-50 p-4 text-sm"></div>
+        <details class="mt-4 text-sm">
+          <summary class="cursor-pointer text-slate-600 font-medium">About Rasi properties</summary>
+          <div id="rasiExplorerAbout" class="text-sm text-slate-600 space-y-2 mt-2"></div>
+        </details>
+        <div id="rasiExplorerCitations" class="mt-2 text-xs text-slate-500 italic"></div>
       </div>
 
       <div id="errOut" class="hidden bg-red-50 border border-red-300 text-red-700 rounded p-3 text-sm"></div>
@@ -1220,6 +1240,7 @@ const TABS = [
   { id: 'yogaButton',      panel: 'yogaOut',      loader: loadYogaKarana },
   { id: 'muhurtaButton',   panel: 'muhurtaOut',   loader: loadMuhurta },
   { id: 'solarButton',     panel: 'solarOut',     loader: loadSolarCal },
+  { id: 'rasiExplorerButton', panel: 'rasiExplorerOut', loader: loadRasiExplorer },
 ];
 
 // ---------- Longitude Lookup (Ch 1) ----------
@@ -1230,18 +1251,18 @@ function escapeHtml(s) {
 // Rasi (sign) characteristics — distilled from Ch 2.2 (properties) and Ch 2.3
 // (indications). Used by Lookup, Maasa, Solar Calendar tabs.
 const RASI_INFO = {
-  "Aries":       { ruler: "Mars",    element: "fire",  modality: "movable", guna: "raajasik",  body: "head",             varna: "Kshatriya", direction: "east",  themes: "dynamic, enterprising, impulsive, leadership, headstrong" },
-  "Taurus":      { ruler: "Venus",   element: "earth", modality: "fixed",   guna: "raajasik",  body: "face",             varna: "Vaisya",    direction: "south", themes: "stable, loyal, luxurious, sluggish, faithful" },
-  "Gemini":      { ruler: "Mercury", element: "air",   modality: "dual",    guna: "taamasik",  body: "chest / arms",     varna: "Sudra",     direction: "west",  themes: "communication, curious, learned, journalism, jovial" },
-  "Cancer":      { ruler: "Moon",    element: "water", modality: "movable", guna: "saattwik",  body: "heart / breast",   varna: "Brahmana",  direction: "north", themes: "emotional, nurturing, sensitive, deeply attached, mother-like" },
-  "Leo":         { ruler: "Sun",     element: "fire",  modality: "fixed",   guna: "saattwik",  body: "stomach",          varna: "Kshatriya", direction: "east",  themes: "royal, self-pride, domineering, authoritative, showy" },
-  "Virgo":       { ruler: "Mercury", element: "earth", modality: "dual",    guna: "taamasik",  body: "hip",              varna: "Vaisya",    direction: "south", themes: "intelligent, sharp, tactful, orator, nervous-physique" },
-  "Libra":       { ruler: "Venus",   element: "air",   modality: "movable", guna: "raajasik",  body: "below navel",      varna: "Sudra",     direction: "west",  themes: "balanced, trader, wise, good-talker, business-oriented" },
-  "Scorpio":     { ruler: "Mars",    element: "water", modality: "fixed",   guna: "raajasik",  body: "private parts",    varna: "Brahmana",  direction: "north", themes: "secretive, scheming, occult, best-friend-or-worst-enemy, peevish" },
-  "Sagittarius": { ruler: "Jupiter", element: "fire",  modality: "dual",    guna: "saattwik",  body: "thighs",           varna: "Kshatriya", direction: "east",  themes: "royal, honest, genial, upright, gambler, fortune-seeking" },
-  "Capricorn":   { ruler: "Saturn",  element: "earth", modality: "movable", guna: "taamasik",  body: "knees",            varna: "Vaisya",    direction: "south", themes: "patient, pragmatic, cautious, secretive, perfectionist, organiser" },
-  "Aquarius":    { ruler: "Saturn",  element: "air",   modality: "fixed",   guna: "taamasik",  body: "ankles",           varna: "Sudra",     direction: "west",  themes: "charity, philosophical, stoic, hard-working, honest" },
-  "Pisces":      { ruler: "Jupiter", element: "water", modality: "dual",    guna: "saattwik",  body: "feet",             varna: "Brahmana",  direction: "north", themes: "intuitive, emotional, timid, talkative, honest, dreamy" },
+  "Aries":       { ruler: "Mars",    element: "fire",  modality: "movable", guna: "raajasik",  body: "head",             varna: "Kshatriya", direction: "east",  dosha: "pitta", color: "blood red",          dayNight: "night", parity: "odd",  foot: "odd",  rising: "prishthodaya", indications: "forests, large forehead, thick eyebrows, hasty, dry, lean, tall", themes: "dynamic, enterprising, impulsive, leadership, headstrong" },
+  "Taurus":      { ruler: "Venus",   element: "earth", modality: "fixed",   guna: "raajasik",  body: "face",             varna: "Vaisya",    direction: "south", dosha: "vaata", color: "white",              dayNight: "night", parity: "even", foot: "odd",  rising: "prishthodaya", indications: "meadows, plains, dining halls, fine teeth, large eyes, thick hair, stout", themes: "stable, loyal, luxurious, sluggish, faithful" },
+  "Gemini":      { ruler: "Mercury", element: "air",   modality: "dual",    guna: "taamasik",  body: "chest / arms",     varna: "Sudra",     direction: "west",  dosha: "mixed", color: "grass green",        dayNight: "night", parity: "odd",  foot: "odd",  rising: "seershodaya",  indications: "gardens, schools, colleges, cables, newspapers, prominent cheeks, broad chest", themes: "communication, curious, learned, journalism, jovial" },
+  "Cancer":      { ruler: "Moon",    element: "water", modality: "movable", guna: "saattwik",  body: "heart / breast",   varna: "Brahmana",  direction: "north", dosha: "kapha", color: "pale red",           dayNight: "night", parity: "even", foot: "even", rising: "prishthodaya", indications: "watery fields, rivers, canals, kitchen, food, small build", themes: "emotional, nurturing, sensitive, deeply attached, mother-like" },
+  "Leo":         { ruler: "Sun",     element: "fire",  modality: "fixed",   guna: "saattwik",  body: "stomach",          varna: "Kshatriya", direction: "east",  dosha: "pitta", color: "white",              dayNight: "day",   parity: "odd",  foot: "even", rising: "seershodaya",  indications: "mountains, forests, caves, palaces, forts, boilers, thin, dry, hot", themes: "royal, self-pride, domineering, authoritative, showy" },
+  "Virgo":       { ruler: "Mercury", element: "earth", modality: "dual",    guna: "taamasik",  body: "hip",              varna: "Vaisya",    direction: "south", dosha: "vaata", color: "variegated",         dayNight: "day",   parity: "even", foot: "even", rising: "seershodaya",  indications: "lush gardens, fields, orchards, libraries, bookstores, farms, physically weak", themes: "intelligent, sharp, tactful, orator, nervous-physique" },
+  "Libra":       { ruler: "Venus",   element: "air",   modality: "movable", guna: "raajasik",  body: "below navel",      varna: "Sudra",     direction: "west",  dosha: "mixed", color: "black",             dayNight: "day",   parity: "odd",  foot: "odd",  rising: "seershodaya",  indications: "markets, trade centres, banks, hotels, amusement parks, cosmetics", themes: "balanced, trader, wise, good-talker, business-oriented" },
+  "Scorpio":     { ruler: "Mars",    element: "water", modality: "fixed",   guna: "raajasik",  body: "private parts",    varna: "Brahmana",  direction: "north", dosha: "kapha", color: "reddish brown",      dayNight: "day",   parity: "even", foot: "odd",  rising: "seershodaya",  indications: "holes, deep caves, mines, garages, small build, bright eyes, dusky", themes: "secretive, scheming, occult, best-friend-or-worst-enemy, peevish" },
+  "Sagittarius": { ruler: "Jupiter", element: "fire",  modality: "dual",    guna: "saattwik",  body: "thighs",           varna: "Kshatriya", direction: "east",  dosha: "pitta", color: "colour of husk of grass", dayNight: "night", parity: "odd",  foot: "odd",  rising: "prishthodaya", indications: "royal, attorneys, government offices, aircraft, sparse hair, muscular, deep eyes", themes: "royal, honest, genial, upright, gambler, fortune-seeking" },
+  "Capricorn":   { ruler: "Saturn",  element: "earth", modality: "movable", guna: "taamasik",  body: "knees",            varna: "Vaisya",    direction: "south", dosha: "vaata", color: "variegated",         dayNight: "night", parity: "even", foot: "even", rising: "prishthodaya", indications: "marsh lands, watery places, alligators, slender build, long neck, prominent teeth", themes: "patient, pragmatic, cautious, secretive, perfectionist, organiser" },
+  "Aquarius":    { ruler: "Saturn",  element: "air",   modality: "fixed",   guna: "taamasik",  body: "ankles",           varna: "Sudra",     direction: "west",  dosha: "mixed", color: "brown (mongoose)",   dayNight: "day",   parity: "odd",  foot: "even", rising: "seershodaya",  indications: "charity, philosophy, mountain springs, places with water, tall, bony, small eyes", themes: "charity, philosophical, stoic, hard-working, honest" },
+  "Pisces":      { ruler: "Jupiter", element: "water", modality: "dual",    guna: "saattwik",  body: "feet",             varna: "Brahmana",  direction: "north", dosha: "kapha", color: "cream / fish colour",dayNight: "day",   parity: "even", foot: "even", rising: "both",         indications: "oceans, seas, prisons, hospitals, hermitages, short, plump, large eyes", themes: "intuitive, emotional, timid, talkative, honest, dreamy" },
 };
 
 // House significations — Ch 7.2. Used by Houses tab.
@@ -1759,6 +1780,127 @@ function _renderSolarBook(d) {
 
   citeEl.innerHTML =
     'Sources — Ch 1.3.7 (Solar calendar &amp; sankrantis), Ch 2.2–2.3 (rasi properties &amp; indications for the transiting sign).';
+}
+
+// ---------- Rasi Explorer (Ch 2) ----------
+const RASI_ORDER = ["Aries","Taurus","Gemini","Cancer","Leo","Virgo","Libra","Scorpio","Sagittarius","Capricorn","Aquarius","Pisces"];
+const RASI_SHORT = { "Aries":"Ar","Taurus":"Ta","Gemini":"Ge","Cancer":"Cn","Leo":"Le","Virgo":"Vi","Libra":"Li","Scorpio":"Sc","Sagittarius":"Sg","Capricorn":"Cp","Aquarius":"Aq","Pisces":"Pi" };
+const RASI_GLYPH = { "Aries":"♈","Taurus":"♉","Gemini":"♊","Cancer":"♋","Leo":"♌","Virgo":"♍","Libra":"♎","Scorpio":"♏","Sagittarius":"♐","Capricorn":"♑","Aquarius":"♒","Pisces":"♓" };
+
+// Backend sometimes returns sign names prefixed with a glyph + variation selector (e.g. "♏︎Scorpio").
+// Strip anything before the first ASCII letter so RASI_INFO lookups succeed.
+function _cleanRasiName(s) {
+  if (!s) return s;
+  const m = String(s).match(/[A-Za-z][A-Za-z ]*/);
+  return m ? m[0].trim() : s;
+}
+
+async function loadRasiExplorer() {
+  const fd = ensureForm(); if (!fd) return;
+  const r = await fetch('/api/chart', { method:'POST', body: fd });
+  if (!r.ok) { showErr('Chart failed: '+r.status); return; }
+  const d = await r.json();
+  document.getElementById('rasiExplorerSubject').textContent = subjectLine(fd);
+
+  const nativeMarks = { lagna: null, sun: null, moon: null, planets: {} };
+  if (d.ascendant_sign_name) nativeMarks.lagna = _cleanRasiName(d.ascendant_sign_name);
+  (d.houses || []).forEach(h => {
+    const signClean = _cleanRasiName(h.sign);
+    (h.planets || []).forEach(p => {
+      const nm = (p.name || '').toLowerCase();
+      if (nm === 'sun')  nativeMarks.sun  = signClean;
+      if (nm === 'moon') nativeMarks.moon = signClean;
+      if (!nativeMarks.planets[signClean]) nativeMarks.planets[signClean] = [];
+      if (!p.is_asc) nativeMarks.planets[signClean].push(p.name);
+    });
+  });
+
+  _renderRasiGrid(nativeMarks);
+  // Default selection: Lagna, else first sign
+  const initial = nativeMarks.lagna || RASI_ORDER[0];
+  _renderRasiDossier(initial, nativeMarks);
+  _renderRasiExplorerAbout();
+  document.getElementById('rasiExplorerCitations').innerHTML =
+    'Sources — Ch 2.2 (Characteristics of Rasis: limbs of Vishnu, odd/even, foot-parity, modality, elements, dosha, guna, directions, colours, day/night, rising, varna), Ch 2.3 (Indications of Rasis).';
+}
+
+function _renderRasiGrid(marks) {
+  const grid = document.getElementById('rasiExplorerGrid');
+  if (!grid) return;
+  grid.innerHTML = RASI_ORDER.map(name => {
+    const info = RASI_INFO[name];
+    const tags = [];
+    if (marks.lagna === name) tags.push('<span class="text-[9px] bg-amber-200 text-amber-900 px-1 rounded">Lagna</span>');
+    if (marks.sun   === name) tags.push('<span class="text-[9px] bg-rose-200 text-rose-900 px-1 rounded">Sun</span>');
+    if (marks.moon  === name) tags.push('<span class="text-[9px] bg-sky-200 text-sky-900 px-1 rounded">Moon</span>');
+    const extraCount = (marks.planets[name] || []).filter(p => p !== 'Sun' && p !== 'Moon').length;
+    const extra = extraCount > 0 ? '<span class="text-[9px] bg-slate-200 text-slate-700 px-1 rounded">+'+extraCount+'</span>' : '';
+    const hasNative = tags.length > 0 || extraCount > 0;
+    const border = hasNative ? 'border-indigo-400 ring-1 ring-indigo-300' : 'border-slate-200';
+    return '<button type="button" data-rasi="'+name+'" class="rasi-tile border '+border+' rounded p-2 text-left hover:bg-indigo-50 transition text-xs">' +
+      '<div class="flex items-center justify-between"><span class="text-lg">'+RASI_GLYPH[name]+'</span><span class="text-[10px] text-slate-500">'+info.element+'</span></div>' +
+      '<div class="font-semibold text-slate-700 mt-1">'+name+'</div>' +
+      '<div class="text-[10px] text-slate-500">'+info.ruler+' · '+info.modality+'</div>' +
+      (tags.length || extra ? '<div class="flex flex-wrap gap-1 mt-1">'+tags.join('')+extra+'</div>' : '') +
+    '</button>';
+  }).join('');
+  grid.querySelectorAll('.rasi-tile').forEach(btn => {
+    btn.addEventListener('click', () => _renderRasiDossier(btn.dataset.rasi, marks));
+  });
+}
+
+function _renderRasiDossier(rasiName, marks) {
+  const el = document.getElementById('rasiExplorerDossier');
+  if (!el) return;
+  const info = RASI_INFO[rasiName];
+  if (!info) { el.innerHTML = ''; return; }
+  const natives = [];
+  if (marks.lagna === rasiName) natives.push('Lagna');
+  if (marks.sun   === rasiName) natives.push('Sun');
+  if (marks.moon  === rasiName) natives.push('Moon');
+  const otherPlanets = (marks.planets[rasiName] || []).filter(p => p !== 'Sun' && p !== 'Moon');
+  const occupants = natives.concat(otherPlanets);
+  const occupantBanner = occupants.length
+    ? '<div class="mb-3 px-3 py-2 rounded bg-indigo-100 text-indigo-900 text-xs">In your chart, <strong>'+rasiName+'</strong> holds: '+occupants.map(o => '<span class="font-semibold">'+o+'</span>').join(', ')+'.</div>'
+    : '';
+
+  const rows = [
+    ['Glyph',            '<span class="text-2xl">'+RASI_GLYPH[rasiName]+'</span> <span class="text-xs text-slate-500">('+RASI_SHORT[rasiName]+')</span>'],
+    ['Ruler',            info.ruler + ' <span class="text-xs text-slate-500">(Ch 3.2)</span>'],
+    ['Body part (Kāla-Purusha)', info.body + ' <span class="text-xs text-slate-500">(Ch 2.2.1)</span>'],
+    ['Modality (chara/sthira/dwiswabhava)', info.modality + ' <span class="text-xs text-slate-500">(Ch 2.2.4)</span>'],
+    ['Element (mahā-bhūta)', info.element + ' <span class="text-xs text-slate-500">(Ch 2.2.5)</span>'],
+    ['Ayurvedic dosha', info.dosha + ' <span class="text-xs text-slate-500">(Ch 2.2.6)</span>'],
+    ['Guna',             info.guna + ' <span class="text-xs text-slate-500">(Ch 2.2.7)</span>'],
+    ['Direction',        info.direction + ' <span class="text-xs text-slate-500">(Ch 2.2.8)</span>'],
+    ['Colour',           info.color + ' <span class="text-xs text-slate-500">(Ch 2.2.9)</span>'],
+    ['Strength time',    info.dayNight + '-time (' + (info.dayNight === 'day' ? 'divā' : 'nishā') + ') <span class="text-xs text-slate-500">(Ch 2.2.10)</span>'],
+    ['Rising mode',      info.rising + ' <span class="text-xs text-slate-500">(Ch 2.2.11 · ' + (info.rising === 'seershodaya' ? 'dasa fruits in first half' : info.rising === 'prishthodaya' ? 'dasa fruits in second half' : 'both halves') + ')</span>'],
+    ['Parity',           info.parity + ' (' + (info.parity === 'odd' ? 'viṣama / male' : 'sama / female') + ') <span class="text-xs text-slate-500">(Ch 2.2.2)</span>'],
+    ['Foot',             info.foot + '-footed <span class="text-xs text-slate-500">(Ch 2.2.3)</span>'],
+    ['Varna',            info.varna + ' <span class="text-xs text-slate-500">(Ch 2.2.12)</span>'],
+  ];
+  const rowsHtml = rows.map(([k,v]) =>
+    '<div class="flex gap-2 py-1 border-b border-slate-100 last:border-0"><div class="w-40 shrink-0 text-slate-500 text-xs">'+k+'</div><div class="flex-1 text-slate-800">'+v+'</div></div>'
+  ).join('');
+
+  const themes = '<div class="mt-3 text-xs"><span class="text-slate-500">Themes:</span> <em>'+info.themes+'</em></div>';
+  const indic  = '<div class="mt-1 text-xs"><span class="text-slate-500">Indications (Ch 2.3):</span> '+info.indications+'</div>';
+
+  el.innerHTML =
+    '<div class="flex items-baseline gap-2 mb-2"><div class="font-semibold text-slate-700 text-lg">'+rasiName+'</div><div class="text-xs text-slate-500">'+info.element+' · '+info.modality+' · '+info.guna+'</div></div>' +
+    occupantBanner +
+    '<div class="text-sm">'+rowsHtml+'</div>' +
+    themes + indic;
+}
+
+function _renderRasiExplorerAbout() {
+  const el = document.getElementById('rasiExplorerAbout');
+  if (!el) return;
+  el.innerHTML =
+    '<p>Every <strong>rasi</strong> is a 30° slice of the zodiac and carries a constellation of fixed properties. Classical texts (Ch 2) classify signs across many axes because different classifications matter for different techniques: modality feeds cara/sthira/dwiswabhava dasa interpretation, elements and doshas feed health readings, day/night strength feeds weight-of-house calculations, varna and direction feed compatibility and direction-of-action.</p>' +
+    '<p>Think of a rasi not as a personality sketch but as a <em>bundle of constraints</em> that colour any planet or house sitting in it. When Mars sits in Aries he amplifies its fiery, pitta, Kshatriya, eastward nature. When he sits in Cancer he is constrained by watery, kapha, Brahmana, northward nature — hence the classical rule that Mars is debilitated in Cancer.</p>' +
+    '<p>Click any tile above to see the full dossier. Tiles outlined in indigo hold one of your natal planets; tags show whether Lagna, Sun or Moon is there.</p>';
 }
 
 function _renderMoonPhase(svgEl, moonMinusSun) {
