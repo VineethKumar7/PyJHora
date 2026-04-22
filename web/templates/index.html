@@ -188,6 +188,7 @@
         <button type="button" id="dashaButton"     data-panel="dashaOut"     class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Dasha</button>
         <button type="button" id="lifeChartButton" data-panel="lifeChartOut" class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Life Chart</button>
         <button type="button" id="lookupButton"    data-panel="lookupOut"    class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Lookup</button>
+        <button type="button" id="housesButton"    data-panel="housesOut"    class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Houses</button>
       </div>
       <div class="flex items-center gap-2 order-2 md:order-3">
         <label class="text-xs text-slate-500 hidden lg:inline" for="ayanamsaNav">Ayanamsa</label>
@@ -404,6 +405,27 @@
         </div>
         <div id="lookupErr" class="hidden bg-red-50 border border-red-300 text-red-700 rounded p-2 text-xs mb-3"></div>
         <div id="lookupResult" class="hidden grid md:grid-cols-3 gap-3"></div>
+      </div>
+
+      <div id="housesOut" class="hidden bg-white rounded-lg shadow p-5">
+        <div class="flex items-baseline justify-between border-b pb-2 mb-3 flex-wrap gap-2">
+          <h2 class="font-semibold text-slate-700">Houses from multiple references</h2>
+          <span id="housesSubject" class="text-xs text-slate-500"></span>
+        </div>
+        <p class="text-xs text-slate-500 mb-3">
+          Ch 1.3.3 · The rasi containing each reference is the 1st house; subsequent rasis are the 2nd, 3rd, … 12th.
+          Click a reference to highlight its column.
+        </p>
+        <div id="housesRefs" class="flex flex-wrap gap-2 mb-3"></div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm" id="housesTable">
+            <thead id="housesHead"></thead>
+            <tbody id="housesBody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+        <p class="text-xs text-slate-400 mt-3">
+          Rate factors — Bhava 0.25°/min (1 rasi per 2h), Hora 0.5°/min, Ghati 1.25°/min. Computed from sunrise + Sun longitude.
+        </p>
       </div>
 
       <div id="errOut" class="hidden bg-red-50 border border-red-300 text-red-700 rounded p-3 text-sm"></div>
@@ -767,6 +789,7 @@ const TABS = [
   { id: 'dashaButton',     panel: 'dashaOut',     loader: loadDasha },
   { id: 'lifeChartButton', panel: 'lifeChartOut', loader: loadLifeChart },
   { id: 'lookupButton',    panel: 'lookupOut',    loader: loadLookup },
+  { id: 'housesButton',    panel: 'housesOut',    loader: loadHouses },
 ];
 
 // ---------- Longitude Lookup (Ch 1) ----------
@@ -823,6 +846,57 @@ async function runLookup(q) {
     errBox.textContent = 'Lookup error: ' + e.message;
     errBox.classList.remove('hidden');
   }
+}
+
+// ---------- Multi-reference Houses (Ch 1.3.3) ----------
+let housesHighlight = null;
+async function loadHouses() {
+  const fd = ensureForm(); if (!fd) return;
+  const r = await fetch('/api/house_references', { method:'POST', body: fd });
+  if (!r.ok) { showErr('Houses failed: '+r.status); return; }
+  const d = await r.json();
+  document.getElementById('housesSubject').textContent = subjectLine(fd);
+  const refs = d.references;
+  const refBadges = document.getElementById('housesRefs');
+  refBadges.innerHTML = refs.map(r =>
+    '<button type="button" class="ref-chip border rounded-full px-3 py-1 text-xs bg-slate-50 hover:bg-indigo-50" data-key="'+r.key+'">'+
+    '<span class="font-medium text-slate-700">'+escapeHtml(r.name)+'</span>' +
+    ' <span class="text-slate-500">'+escapeHtml(r.abbr)+' '+escapeHtml(r.deg_in_sign)+'</span>' +
+    '</button>'
+  ).join('');
+  const head = document.getElementById('housesHead');
+  head.innerHTML = '<tr class="text-left text-slate-500 border-b">' +
+    '<th class="py-2 pr-3 w-14">House</th>' +
+    refs.map(r => '<th class="py-2 pr-3 href-col" data-key="'+r.key+'">'+escapeHtml(r.name.split(' ')[0])+'</th>').join('') +
+    '</tr>';
+  const body = document.getElementById('housesBody');
+  body.innerHTML = d.houses.map(h =>
+    '<tr><td class="py-1.5 pr-3 text-slate-400 font-medium">'+h.house+'</td>' +
+    refs.map(r => {
+      const s = h.signs[r.key];
+      return '<td class="py-1.5 pr-3 href-col" data-key="'+r.key+'">' +
+             '<span class="font-medium text-slate-800">'+escapeHtml(s.abbr)+'</span>' +
+             ' <span class="text-slate-500 text-xs">'+escapeHtml(s.sign)+'</span></td>';
+    }).join('') + '</tr>'
+  ).join('');
+
+  const applyHighlight = () => {
+    document.querySelectorAll('.href-col').forEach(e => {
+      e.classList.toggle('bg-amber-50', housesHighlight && e.dataset.key === housesHighlight);
+      e.classList.toggle('font-semibold', housesHighlight && e.dataset.key === housesHighlight);
+    });
+    document.querySelectorAll('.ref-chip').forEach(e => {
+      e.classList.toggle('bg-indigo-600', housesHighlight === e.dataset.key);
+      e.classList.toggle('text-white', housesHighlight === e.dataset.key);
+    });
+  };
+  document.querySelectorAll('.ref-chip').forEach(b => {
+    b.addEventListener('click', () => {
+      housesHighlight = (housesHighlight === b.dataset.key) ? null : b.dataset.key;
+      applyHighlight();
+    });
+  });
+  applyHighlight();
 }
 
 async function loadLookup() {

@@ -188,6 +188,95 @@ async def longitude_lookup(q: str = Query(..., min_length=1, description="e.g. '
     return {"input": q, "canonical": canonical, **data}
 
 
+def _sign_and_deg(abs_long: float, rasi_names):
+    abs_long = abs_long % 360.0
+    idx = int(abs_long // 30)
+    return idx, rasi_names[idx], abs_long - idx * 30
+
+
+@app.post("/api/house_references")
+async def house_references(
+    date: str = Form(...),
+    time: str = Form(...),
+    latitude: float = Form(...),
+    longitude: float = Form(...),
+    timezone: float = Form(...),
+    ayanamsa: Optional[str] = Form(None),
+):
+    """Compute houses from multiple reference points (Ch 1.3.3 + Ex. 2).
+
+    References: Lagna, Chandra (Moon), Surya (Sun), Bhava Lagna, Hora Lagna, Ghati Lagna.
+    """
+    mode = _apply_ayanamsa(ayanamsa)
+    place, jd, _, _ = _make_place_and_jd(date, time, latitude, longitude, timezone)
+    rasi_names = utils.RAASI_LIST
+    rasi_abbr = utils.RAASI_SHORT_LIST if hasattr(utils, "RAASI_SHORT_LIST") else [
+        "Ar", "Ta", "Ge", "Cn", "Le", "Vi", "Li", "Sc", "Sg", "Cp", "Aq", "Pi"
+    ]
+
+    # Main rasi chart -> find Sun and Moon positions
+    rasi_rows = charts.rasi_chart(jd, place)
+    sun_sign, moon_sign = None, None
+    sun_deg, moon_deg = 0.0, 0.0
+    asc_sign, asc_deg = None, 0.0
+    for token, (sign_idx, deg) in rasi_rows:
+        if token == "L":
+            asc_sign, asc_deg = sign_idx, deg
+        elif token == 0:
+            sun_sign, sun_deg = sign_idx, deg
+        elif token == 1:
+            moon_sign, moon_deg = sign_idx, deg
+
+    # Special lagnas
+    try:
+        bhava = drik.special_ascendant(jd, place, lagna_rate_factor=0.25)
+        hora  = drik.special_ascendant(jd, place, lagna_rate_factor=0.5)
+        ghati = drik.special_ascendant(jd, place, lagna_rate_factor=1.25)
+    except Exception:
+        bhava, hora, ghati = None, None, None
+
+    def _ref(key, label, sign_idx, deg_in_sign, note=""):
+        if sign_idx is None:
+            return None
+        return {
+            "key": key,
+            "name": label,
+            "sign_index": sign_idx,
+            "sign": rasi_names[sign_idx],
+            "abbr": rasi_abbr[sign_idx],
+            "deg_in_sign": _deg_to_dms(deg_in_sign),
+            "note": note,
+        }
+
+    refs = []
+    refs.append(_ref("lagna", "Lagna (Ascendant)", asc_sign, asc_deg, "Default reference"))
+    refs.append(_ref("moon",  "Chandra Lagna (Moon)", moon_sign, moon_deg))
+    refs.append(_ref("sun",   "Surya Lagna (Sun)", sun_sign, sun_deg))
+    if bhava: refs.append(_ref("bhava", "Bhava Lagna", bhava[0], bhava[1]))
+    if hora:  refs.append(_ref("hora",  "Hora Lagna",  hora[0], hora[1]))
+    if ghati: refs.append(_ref("ghati", "Ghati Lagna", ghati[0], ghati[1]))
+    refs = [r for r in refs if r]
+
+    # Build 12x|refs| matrix: for each house, the sign under every reference
+    houses_matrix = []
+    for h in range(1, 13):
+        row = {"house": h, "signs": {}}
+        for r in refs:
+            s = (r["sign_index"] + h - 1) % 12
+            row["signs"][r["key"]] = {
+                "sign_index": s,
+                "sign": rasi_names[s],
+                "abbr": rasi_abbr[s],
+            }
+        houses_matrix.append(row)
+
+    return {
+        "ayanamsa": mode,
+        "references": refs,
+        "houses": houses_matrix,
+    }
+
+
 @app.post("/api/panchangam")
 async def panchangam(
     date: str = Form(...),
