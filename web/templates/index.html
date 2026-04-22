@@ -193,6 +193,7 @@
         <button type="button" id="maasaButton"     data-panel="maasaOut"     class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Maasa</button>
         <button type="button" id="tithiButton"     data-panel="tithiOut"     class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Tithi</button>
         <button type="button" id="yogaButton"      data-panel="yogaOut"      class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Yoga/Karana</button>
+        <button type="button" id="muhurtaButton"   data-panel="muhurtaOut"   class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Muhurta</button>
       </div>
       <div class="flex items-center gap-2 order-2 md:order-3">
         <label class="text-xs text-slate-500 hidden lg:inline" for="ayanamsaNav">Ayanamsa</label>
@@ -533,6 +534,21 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <div id="muhurtaOut" class="hidden bg-white rounded-lg shadow p-5">
+        <div class="flex items-baseline justify-between border-b pb-2 mb-3 flex-wrap gap-2">
+          <h2 class="font-semibold text-slate-700">Panchaanga Muhurta</h2>
+          <span id="muhurtaSubject" class="text-xs text-slate-500"></span>
+        </div>
+        <p class="text-xs text-slate-500 mb-3">
+          Ch 1.3.12 · The five limbs (Tithi · Vaara · Nakshatra · Yoga · Karana) are judged
+          together to estimate the overall tone of a moment. Heuristic only — specific
+          activities (marriage, travel, surgery, …) layer additional rules on top.
+        </p>
+        <div id="muhurtaVerdict" class="rounded border px-4 py-3 mb-4 text-sm font-medium"></div>
+        <div id="muhurtaLimbs" class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-3"></div>
+        <div id="muhurtaTally" class="text-xs text-slate-500"></div>
       </div>
 
       <div id="errOut" class="hidden bg-red-50 border border-red-300 text-red-700 rounded p-3 text-sm"></div>
@@ -1097,6 +1113,7 @@ const TABS = [
   { id: 'maasaButton',     panel: 'maasaOut',     loader: loadMaasa },
   { id: 'tithiButton',     panel: 'tithiOut',     loader: loadTithi },
   { id: 'yogaButton',      panel: 'yogaOut',      loader: loadYogaKarana },
+  { id: 'muhurtaButton',   panel: 'muhurtaOut',   loader: loadMuhurta },
 ];
 
 // ---------- Longitude Lookup (Ch 1) ----------
@@ -1252,6 +1269,51 @@ async function loadYogaKarana() {
     '<td class="px-2 py-1">'+escapeHtml(k.name)+'</td>' +
     '<td class="px-2 py-1 text-slate-500">'+escapeHtml(k.nature)+'</td>' +
     '</tr>').join('');
+}
+
+async function loadMuhurta() {
+  const fd = ensureForm(); if (!fd) return;
+  const r = await fetch('/api/muhurta', { method:'POST', body: fd });
+  if (!r.ok) { showErr('Muhurta failed: '+r.status); return; }
+  const d = await r.json();
+  document.getElementById('muhurtaSubject').textContent = subjectLine(fd);
+
+  const good = d.tally.good, bad = d.tally.avoid;
+  let banner;
+  if (good >= 3 && bad === 0)      banner = 'bg-emerald-50 border-emerald-300 text-emerald-900';
+  else if (bad >= 3)               banner = 'bg-rose-50 border-rose-300 text-rose-900';
+  else if (bad > good)             banner = 'bg-amber-50 border-amber-300 text-amber-900';
+  else                             banner = 'bg-slate-50 border-slate-300 text-slate-800';
+  const verdictEl = document.getElementById('muhurtaVerdict');
+  verdictEl.className = 'rounded border px-4 py-3 mb-4 text-sm font-medium ' + banner;
+  verdictEl.innerHTML =
+    '<div class="text-xs uppercase tracking-wide opacity-70 mb-1">Overall verdict</div>' +
+    '<div class="text-base">'+escapeHtml(d.verdict)+'</div>';
+
+  const badgeCls = v => ({
+    good:    'bg-emerald-100 text-emerald-800 border-emerald-200',
+    avoid:   'bg-rose-100 text-rose-800 border-rose-200',
+    neutral: 'bg-slate-100 text-slate-700 border-slate-200',
+  })[v] || 'bg-slate-100 text-slate-700 border-slate-200';
+  const cardCls = v => ({
+    good:    'border-emerald-200 bg-emerald-50/40',
+    avoid:   'border-rose-200 bg-rose-50/40',
+    neutral: 'border-slate-200 bg-white',
+  })[v] || 'border-slate-200 bg-white';
+
+  document.getElementById('muhurtaLimbs').innerHTML = d.limbs.map(l =>
+    '<div class="rounded border p-3 '+cardCls(l.verdict)+'">' +
+    '<div class="flex items-center justify-between mb-1">' +
+      '<div class="text-xs uppercase tracking-wide text-slate-500">'+escapeHtml(l.label)+'</div>' +
+      '<span class="text-[10px] px-1.5 py-0.5 rounded border '+badgeCls(l.verdict)+'">'+escapeHtml(l.verdict)+'</span>' +
+    '</div>' +
+    '<div class="font-semibold text-slate-800 text-sm mb-1">'+escapeHtml(l.value)+'</div>' +
+    '<div class="text-xs text-slate-500">'+escapeHtml(l.reason)+'</div>' +
+    '</div>').join('');
+
+  document.getElementById('muhurtaTally').textContent =
+    'Tally: '+d.tally.good+' good · '+d.tally.neutral+' neutral · '+d.tally.avoid+' avoid'+
+    (d.sunrise ? '   ·   Sunrise: '+d.sunrise : '');
 }
 
 function _renderMoonPhase(svgEl, moonMinusSun) {

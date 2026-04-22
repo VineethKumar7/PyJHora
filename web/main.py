@@ -609,6 +609,137 @@ async def yoga_karana_api(
     })
 
 
+# Muhurta heuristics used by /api/muhurta (Ch 1.3.12).
+# These are traditional rules of thumb — good for general-purpose starts; specific
+# ventures (marriage, travel, surgery, etc.) layer additional rules on top.
+TITHI_RIKTA = {4, 9, 14, 19, 24, 29}        # "empty" / inauspicious
+TITHI_NANDA = {1, 6, 11, 16, 21, 26}        # joyful
+TITHI_PURNA = {5, 10, 15, 20, 25}           # full / substantial
+TITHI_AMAVASYA = 30                         # new moon — generally avoid
+
+NAKSHATRA_AUSPICIOUS = {4, 7, 8, 13, 17, 21, 22, 27}  # Rohini, Punarvasu, Pushyami, Hasta, Anooraadha, Uttaraashaadha, Sravanam, Revati
+NAKSHATRA_INAUSPICIOUS = {6, 9, 16, 19, 24, 27}       # Aardra, Aasresha, Visaakha, Moola, Satabhishak ... (context-dependent)
+
+YOGA_INAUSPICIOUS = {6, 9, 10, 13, 15, 17, 19, 27}    # Atiganda, Shoola, Ganda, Vyaaghaata, Vajra, Vyatipaata, Parigha, Vaidhriti
+YOGA_AUSPICIOUS = {3, 4, 7, 8, 11, 16, 22, 23, 24, 25}
+
+# drik.vaara 0..6, with 0=Sun.
+VAARA_QUALITY = ["Moderate", "Auspicious", "Fierce", "Auspicious", "Most auspicious", "Auspicious", "Moderate"]
+VAARA_HINT = [
+    "Sun's day · ritual, health, authority",
+    "Moon's day · calm, domestic, feminine matters",
+    "Mars's day · avoid for gentle starts; ok for combat/competition",
+    "Mercury's day · study, travel, trade",
+    "Jupiter's day · learning, marriage, pilgrimage",
+    "Venus's day · love, arts, luxury, journeys",
+    "Saturn's day · endings, remedial work, discipline",
+]
+
+
+def _muhurta_verdict(good: int, bad: int) -> str:
+    if good >= 3 and bad == 0:
+        return "Auspicious — favourable overall"
+    if bad >= 3:
+        return "Inauspicious — consider deferring"
+    if bad > good:
+        return "Mixed, leaning inauspicious"
+    return "Mixed — proceed with care"
+
+
+@app.post("/api/muhurta")
+async def muhurta_api(
+    date: str = Form(...),
+    time: str = Form("12:00"),
+    latitude: float = Form(...),
+    longitude: float = Form(...),
+    timezone: float = Form(...),
+    ayanamsa: Optional[str] = Form(None),
+):
+    _apply_ayanamsa(ayanamsa)
+    place, jd, _, _ = _make_place_and_jd(date, time, latitude, longitude, timezone)
+
+    nak = drik.nakshatra(jd, place)
+    nak_num = nak[0]
+    nak_name = utils.NAKSHATRA_LIST[nak_num - 1] if nak_num <= len(utils.NAKSHATRA_LIST) else str(nak_num)
+
+    tit = drik.tithi(jd, place)
+    tithi_num = tit[0]
+    tithi_name = utils.TITHI_LIST[tithi_num - 1] if tithi_num <= len(utils.TITHI_LIST) else str(tithi_num)
+
+    yog = drik.yogam(jd, place)
+    yoga_num = yog[0]
+    yoga_name = utils.YOGAM_LIST[yoga_num - 1] if yoga_num <= len(utils.YOGAM_LIST) else str(yoga_num)
+
+    kar = drik.karana(jd, place)
+    kar_slot = kar[0]
+    # canonical karana index (1..11) same logic as yoga_karana endpoint
+    if kar_slot == 1:
+        kar_name, kar_canon = "Kimstughna", 11
+    elif 2 <= kar_slot <= 57:
+        mov_idx = (kar_slot - 2) % 7
+        kar_name, kar_canon = KARANA_NAMES[mov_idx], mov_idx + 1
+    elif kar_slot == 58:
+        kar_name, kar_canon = "Sakuna", 8
+    elif kar_slot == 59:
+        kar_name, kar_canon = "Chatushpada", 9
+    else:
+        kar_name, kar_canon = "Naga", 10
+
+    vaara_idx = drik.vaara(jd, place)
+    vaara_name = utils.DAYS_LIST[vaara_idx] if 0 <= vaara_idx < 7 else str(vaara_idx)
+    sr = drik.sunrise(jd, place)
+
+    # Per-limb verdict: 'good' / 'neutral' / 'avoid'
+    def classify_tithi(n):
+        if n == TITHI_AMAVASYA: return ("avoid", "Amavasya — new moon, generally inauspicious")
+        if n in TITHI_RIKTA:     return ("avoid", "Rikta tithi — avoid for auspicious starts")
+        if n in TITHI_NANDA:     return ("good", "Nanda tithi — joyful, favourable")
+        if n in TITHI_PURNA:     return ("good", "Purna tithi — full, substantial")
+        return ("neutral", "Bhadra/Jaya tithi — moderate")
+
+    def classify_vaara(idx):
+        # Thursday best, Sun moderate, Mars fierce
+        q = VAARA_QUALITY[idx]
+        if q == "Most auspicious": return ("good", "Jupiter's day — most auspicious")
+        if q == "Fierce":          return ("avoid", "Mars's day — fierce energy")
+        if q == "Auspicious":      return ("good", VAARA_HINT[idx])
+        return ("neutral", VAARA_HINT[idx])
+
+    def classify_nak(n):
+        if n in NAKSHATRA_AUSPICIOUS: return ("good", "Favourable nakshatra")
+        if n in NAKSHATRA_INAUSPICIOUS: return ("avoid", "Avoid for most starts (context-dependent)")
+        return ("neutral", "Neutral nakshatra")
+
+    def classify_yoga(n):
+        if n in YOGA_INAUSPICIOUS: return ("avoid", "Inauspicious yoga — avoid")
+        if n in YOGA_AUSPICIOUS:   return ("good", "Auspicious yoga")
+        return ("neutral", "Neutral yoga")
+
+    def classify_karana(canon):
+        if canon == 7:    return ("avoid", "Vishti (Bhadra) — avoid for auspicious starts")
+        if canon in (10,): return ("avoid", "Fixed karana — generally inauspicious")
+        if canon in (1, 2, 3, 4): return ("good", "Auspicious / flexible karana")
+        return ("neutral", "Neutral karana")
+
+    limbs = [
+        {"label": "Tithi", "value": f"{tithi_num}. {tithi_name}", **dict(zip(["verdict", "reason"], classify_tithi(tithi_num)))},
+        {"label": "Vaara", "value": vaara_name, **dict(zip(["verdict", "reason"], classify_vaara(vaara_idx)))},
+        {"label": "Nakshatra", "value": f"{nak_num}. {nak_name} (pada {nak[1]})", **dict(zip(["verdict", "reason"], classify_nak(nak_num)))},
+        {"label": "Yoga", "value": f"{yoga_num}. {yoga_name}", **dict(zip(["verdict", "reason"], classify_yoga(yoga_num)))},
+        {"label": "Karana", "value": f"{kar_canon}. {kar_name}", **dict(zip(["verdict", "reason"], classify_karana(kar_canon)))},
+    ]
+    good = sum(1 for l in limbs if l["verdict"] == "good")
+    bad  = sum(1 for l in limbs if l["verdict"] == "avoid")
+    neutral = 5 - good - bad
+
+    return JSONResponse({
+        "limbs": limbs,
+        "tally": {"good": good, "neutral": neutral, "avoid": bad},
+        "verdict": _muhurta_verdict(good, bad),
+        "sunrise": sr[1],
+    })
+
+
 @app.post("/api/chart")
 async def chart(
     date: str = Form(...),
