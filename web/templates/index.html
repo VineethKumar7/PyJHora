@@ -462,6 +462,7 @@
         <p class="text-xs text-slate-400 mt-3">
           Rate factors — Bhava 0.25°/min (1 rasi per 2h), Hora 0.5°/min, Ghati 1.25°/min. Computed from sunrise + Sun longitude.
         </p>
+        <div id="digBalaCard" class="mt-5 rounded border border-amber-200 bg-amber-50 p-4 text-sm hidden"></div>
         <details class="mt-5 border-t pt-3" open>
           <summary class="font-semibold text-slate-700 cursor-pointer">About Houses &amp; References <span class="text-xs text-slate-400 font-normal">(from the book)</span></summary>
           <div id="housesAbout" class="text-sm text-slate-600 space-y-2 mt-2"></div>
@@ -1553,9 +1554,14 @@ async function runLookup(q) {
 let housesHighlight = null;
 async function loadHouses() {
   const fd = ensureForm(); if (!fd) return;
-  const r = await fetch('/api/house_references', { method:'POST', body: fd });
+  const fdChart = ensureForm();
+  const [r, rChart] = await Promise.all([
+    fetch('/api/house_references', { method:'POST', body: fd }),
+    fetch('/api/chart', { method:'POST', body: fdChart })
+  ]);
   if (!r.ok) { showErr('Houses failed: '+r.status); return; }
   const d = await r.json();
+  const chart = rChart.ok ? await rChart.json() : null;
   document.getElementById('housesSubject').textContent = subjectLine(fd);
   const refs = d.references;
   const refBadges = document.getElementById('housesRefs');
@@ -1599,6 +1605,72 @@ async function loadHouses() {
   });
   applyHighlight();
   _renderHousesBook(d);
+  _renderDigBalaCard(chart);
+}
+
+// Dig Bala preview (Ch 2.2.8 → Ch 15). Each graha has a cardinal house where
+// it gets "directional strength" — stronger when there, weak at the opposite.
+// East = 1st (Lagna), South = 10th (Karma), West = 7th (Kalatra), North = 4th (Sukha).
+const DIG_BALA = {
+  Sun:     { strongHouse: 10, strongDir: 'south', significator: 'royal/authority' },
+  Mars:    { strongHouse: 10, strongDir: 'south', significator: 'action, battle' },
+  Jupiter: { strongHouse:  1, strongDir: 'east',  significator: 'wisdom, dharma' },
+  Mercury: { strongHouse:  1, strongDir: 'east',  significator: 'speech, learning' },
+  Moon:    { strongHouse:  4, strongDir: 'north', significator: 'mind, comfort' },
+  Venus:   { strongHouse:  4, strongDir: 'north', significator: 'pleasure, vehicles' },
+  Saturn:  { strongHouse:  7, strongDir: 'west',  significator: 'duty, longevity' },
+};
+
+function _renderDigBalaCard(chart) {
+  const card = document.getElementById('digBalaCard');
+  if (!card) return;
+  if (!chart || !Array.isArray(chart.houses) || chart.ascendant_sign == null) {
+    card.classList.add('hidden'); return;
+  }
+  const ascIdx = chart.ascendant_sign;
+  const placements = [];
+  chart.houses.forEach(h => {
+    const houseNum = ((h.sign_index - ascIdx + 12) % 12) + 1;
+    const signClean = _cleanRasiName(h.sign);
+    (h.planets || []).forEach(p => {
+      if (p.is_asc) return;
+      const nm = p.name;
+      if (DIG_BALA[nm]) placements.push({ planet: nm, house: houseNum, rasi: signClean });
+    });
+  });
+
+  if (!placements.length) { card.classList.add('hidden'); return; }
+
+  const ringDistance = (h, target) => {
+    const d = Math.abs(h - target);
+    return Math.min(d, 12 - d); // 0..6
+  };
+
+  const rowHtml = placements.map(pl => {
+    const meta = DIG_BALA[pl.planet];
+    const dist = ringDistance(pl.house, meta.strongHouse);
+    // 0 = full dig-bala, 6 = full weakness (opposite house), in between = partial.
+    let tag, tagClass;
+    if (dist === 0)      { tag = 'full dig-bala';      tagClass = 'bg-emerald-200 text-emerald-900'; }
+    else if (dist <= 2)  { tag = 'partial strength';   tagClass = 'bg-lime-200 text-lime-900'; }
+    else if (dist === 6) { tag = 'dig-bala weakness';  tagClass = 'bg-rose-200 text-rose-900'; }
+    else if (dist >= 4)  { tag = 'partial weakness';   tagClass = 'bg-amber-200 text-amber-900'; }
+    else                 { tag = 'neutral';            tagClass = 'bg-slate-200 text-slate-700'; }
+    return '<tr class="border-b border-amber-100">' +
+      '<td class="py-1.5 pr-3 font-medium text-slate-800">'+pl.planet+'</td>' +
+      '<td class="py-1.5 pr-3 text-slate-700">'+pl.rasi+'</td>' +
+      '<td class="py-1.5 pr-3 text-slate-700">'+pl.house+'</td>' +
+      '<td class="py-1.5 pr-3 text-slate-500 text-xs">'+meta.strongHouse+' ('+meta.strongDir+')</td>' +
+      '<td class="py-1.5"><span class="px-2 py-0.5 rounded text-[11px] '+tagClass+'">'+tag+'</span></td>' +
+      '</tr>';
+  }).join('');
+
+  card.classList.remove('hidden');
+  card.innerHTML =
+    '<div class="text-amber-800 font-semibold mb-1">Dig Bala preview <span class="text-xs font-normal text-amber-700">(Ch 2.2.8 → Ch 15.1)</span></div>' +
+    '<p class="text-xs text-slate-600 mb-3">Every graha has one <em>cardinal house</em> where it gains <strong>directional strength</strong> (dig bala). Jupiter &amp; Mercury love the 1st (east, rising), Sun &amp; Mars the 10th (south, overhead), Saturn the 7th (west, setting), Moon &amp; Venus the 4th (north, pātāla). At the opposite house a graha is dig-bala weak.</p>' +
+    '<div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-amber-800 border-b border-amber-300"><th class="py-1 pr-3">Planet</th><th class="py-1 pr-3">Rasi</th><th class="py-1 pr-3">House (from Lagna)</th><th class="py-1 pr-3">Ideal house</th><th class="py-1">Dig bala</th></tr></thead><tbody>' + rowHtml + '</tbody></table></div>' +
+    '<p class="text-[11px] text-slate-500 italic mt-2">This is a simplified preview — Ch 15 gives the full Parasari calculation (proportional strength by angular distance from the ideal house). Rahu &amp; Ketu don’t take dig bala.</p>';
 }
 
 // Book-sourced explainer for the Houses tab. Covers what a house is, why the
