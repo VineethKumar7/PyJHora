@@ -195,6 +195,7 @@
         <button type="button" id="yogaButton"      data-panel="yogaOut"      class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Yoga/Karana</button>
         <button type="button" id="muhurtaButton"   data-panel="muhurtaOut"   class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Muhurta</button>
         <button type="button" id="solarButton"     data-panel="solarOut"     class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Solar Cal</button>
+        <button type="button" id="quizButton"      data-panel="quizOut"      class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Quiz</button>
       </div>
       <div class="flex items-center gap-2 order-2 md:order-3">
         <label class="text-xs text-slate-500 hidden lg:inline" for="ayanamsaNav">Ayanamsa</label>
@@ -598,6 +599,26 @@
             </thead>
             <tbody id="solarMonthsTable" class="divide-y divide-slate-100"></tbody>
           </table>
+        </div>
+      </div>
+
+      <div id="quizOut" class="hidden bg-white rounded-lg shadow p-5">
+        <div class="flex items-baseline justify-between border-b pb-2 mb-3 flex-wrap gap-2">
+          <h2 class="font-semibold text-slate-700">Chapter 1 Practice</h2>
+          <span id="quizScore" class="text-xs text-slate-500">0 of 0 correct</span>
+        </div>
+        <p class="text-xs text-slate-500 mb-3">
+          Multiple-choice drills from the Ch 1 tables — rasis, nakshatras, tithis,
+          yogas, horas, the solar calendar. Pick an answer to see the explanation,
+          then skip to the next one.
+        </p>
+        <div id="quizCard" class="rounded border border-slate-200 p-4">
+          <div id="quizPrompt" class="text-base font-medium text-slate-800 mb-3"></div>
+          <div id="quizOptions" class="grid sm:grid-cols-2 gap-2 mb-3"></div>
+          <div id="quizExplain" class="hidden text-sm bg-slate-50 border border-slate-200 rounded p-3 mb-3"></div>
+          <div class="flex justify-end">
+            <button id="quizNextBtn" type="button" class="text-sm px-3 py-1.5 rounded bg-indigo-600 text-white hover:bg-indigo-700">Next question →</button>
+          </div>
         </div>
       </div>
 
@@ -1165,6 +1186,7 @@ const TABS = [
   { id: 'yogaButton',      panel: 'yogaOut',      loader: loadYogaKarana },
   { id: 'muhurtaButton',   panel: 'muhurtaOut',   loader: loadMuhurta },
   { id: 'solarButton',     panel: 'solarOut',     loader: loadSolarCal },
+  { id: 'quizButton',      panel: 'quizOut',      loader: loadQuiz },
 ];
 
 // ---------- Longitude Lookup (Ch 1) ----------
@@ -1365,6 +1387,68 @@ async function loadMuhurta() {
   document.getElementById('muhurtaTally').textContent =
     'Tally: '+d.tally.good+' good · '+d.tally.neutral+' neutral · '+d.tally.avoid+' avoid'+
     (d.sunrise ? '   ·   Sunrise: '+d.sunrise : '');
+}
+
+// ---------- Quiz (Ch 1 practice) ----------
+const _quiz = { current: null, total: 0, correct: 0, bound: false };
+
+function _quizRenderScore() {
+  document.getElementById('quizScore').textContent =
+    _quiz.correct + ' of ' + _quiz.total + ' correct' +
+    (_quiz.total ? ' (' + Math.round((_quiz.correct/_quiz.total)*100) + '%)' : '');
+}
+
+async function _quizLoadNext() {
+  const promptEl = document.getElementById('quizPrompt');
+  const optsEl = document.getElementById('quizOptions');
+  const explEl = document.getElementById('quizExplain');
+  promptEl.textContent = 'Loading…';
+  optsEl.innerHTML = ''; explEl.classList.add('hidden'); explEl.innerHTML = '';
+  const r = await fetch('/api/quiz/next');
+  if (!r.ok) { showErr('Quiz failed: '+r.status); return; }
+  const q = await r.json();
+  _quiz.current = q;
+  promptEl.textContent = q.prompt;
+  optsEl.innerHTML = '';
+  q.options.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'quiz-opt text-left text-sm px-3 py-2 rounded border border-slate-300 bg-white hover:bg-slate-50';
+    btn.textContent = String.fromCharCode(65 + i) + '.  ' + opt;
+    btn.addEventListener('click', () => _quizPick(i));
+    optsEl.appendChild(btn);
+  });
+}
+
+function _quizPick(chosen) {
+  if (!_quiz.current || _quiz.current._answered) return;
+  _quiz.current._answered = true;
+  _quiz.total += 1;
+  const correct = _quiz.current.correct_index;
+  const btns = document.querySelectorAll('#quizOptions .quiz-opt');
+  btns.forEach((b, i) => {
+    b.disabled = true;
+    if (i === correct) b.className = 'quiz-opt text-left text-sm px-3 py-2 rounded border border-emerald-400 bg-emerald-50 text-emerald-900';
+    else if (i === chosen) b.className = 'quiz-opt text-left text-sm px-3 py-2 rounded border border-rose-400 bg-rose-50 text-rose-900';
+    else b.className = 'quiz-opt text-left text-sm px-3 py-2 rounded border border-slate-200 bg-slate-50 text-slate-500';
+  });
+  if (chosen === correct) _quiz.correct += 1;
+  const explEl = document.getElementById('quizExplain');
+  explEl.classList.remove('hidden');
+  explEl.innerHTML =
+    '<div class="font-semibold '+ (chosen === correct ? 'text-emerald-800' : 'text-rose-800') +' mb-1">' +
+    (chosen === correct ? '✓ Correct.' : '✗ Not quite.') + '</div>' +
+    '<div class="text-slate-700">' + escapeHtml(_quiz.current.explanation) + '</div>';
+  _quizRenderScore();
+}
+
+async function loadQuiz() {
+  if (!_quiz.bound) {
+    _quiz.bound = true;
+    document.getElementById('quizNextBtn').addEventListener('click', _quizLoadNext);
+  }
+  _quizRenderScore();
+  if (!_quiz.current) await _quizLoadNext();
 }
 
 async function loadSolarCal() {
