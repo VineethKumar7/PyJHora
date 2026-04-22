@@ -425,6 +425,12 @@
         </div>
         <div id="lookupErr" class="hidden bg-red-50 border border-red-300 text-red-700 rounded p-2 text-xs mb-3"></div>
         <div id="lookupResult" class="hidden grid md:grid-cols-3 gap-3"></div>
+        <details id="lookupAboutDetails" class="hidden mt-5 border-t pt-3" open>
+          <summary class="font-semibold text-slate-700 cursor-pointer">About Rasi, Nakshatra &amp; Pada <span class="text-xs text-slate-400 font-normal">(from the book)</span></summary>
+          <div id="lookupAbout" class="text-sm text-slate-600 space-y-2 mt-2"></div>
+        </details>
+        <div id="lookupReading" class="hidden mt-4 rounded border border-indigo-200 bg-indigo-50 p-4 text-sm"></div>
+        <div id="lookupCitations" class="hidden mt-2 text-xs text-slate-500 italic"></div>
       </div>
 
       <div id="housesOut" class="hidden bg-white rounded-lg shadow p-5">
@@ -1207,6 +1213,39 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// Rasi (sign) characteristics — distilled from Ch 2.2 (properties) and Ch 2.3
+// (indications). Used by Lookup, Maasa, Solar Calendar tabs.
+const RASI_INFO = {
+  "Aries":       { ruler: "Mars",    element: "fire",  modality: "movable", guna: "raajasik",  body: "head",             varna: "Kshatriya", direction: "east",  themes: "dynamic, enterprising, impulsive, leadership, headstrong" },
+  "Taurus":      { ruler: "Venus",   element: "earth", modality: "fixed",   guna: "raajasik",  body: "face",             varna: "Vaisya",    direction: "south", themes: "stable, loyal, luxurious, sluggish, faithful" },
+  "Gemini":      { ruler: "Mercury", element: "air",   modality: "dual",    guna: "taamasik",  body: "chest / arms",     varna: "Sudra",     direction: "west",  themes: "communication, curious, learned, journalism, jovial" },
+  "Cancer":      { ruler: "Moon",    element: "water", modality: "movable", guna: "saattwik",  body: "heart / breast",   varna: "Brahmana",  direction: "north", themes: "emotional, nurturing, sensitive, deeply attached, mother-like" },
+  "Leo":         { ruler: "Sun",     element: "fire",  modality: "fixed",   guna: "saattwik",  body: "stomach",          varna: "Kshatriya", direction: "east",  themes: "royal, self-pride, domineering, authoritative, showy" },
+  "Virgo":       { ruler: "Mercury", element: "earth", modality: "dual",    guna: "taamasik",  body: "hip",              varna: "Vaisya",    direction: "south", themes: "intelligent, sharp, tactful, orator, nervous-physique" },
+  "Libra":       { ruler: "Venus",   element: "air",   modality: "movable", guna: "raajasik",  body: "below navel",      varna: "Sudra",     direction: "west",  themes: "balanced, trader, wise, good-talker, business-oriented" },
+  "Scorpio":     { ruler: "Mars",    element: "water", modality: "fixed",   guna: "raajasik",  body: "private parts",    varna: "Brahmana",  direction: "north", themes: "secretive, scheming, occult, best-friend-or-worst-enemy, peevish" },
+  "Sagittarius": { ruler: "Jupiter", element: "fire",  modality: "dual",    guna: "saattwik",  body: "thighs",           varna: "Kshatriya", direction: "east",  themes: "royal, honest, genial, upright, gambler, fortune-seeking" },
+  "Capricorn":   { ruler: "Saturn",  element: "earth", modality: "movable", guna: "taamasik",  body: "knees",            varna: "Vaisya",    direction: "south", themes: "patient, pragmatic, cautious, secretive, perfectionist, organiser" },
+  "Aquarius":    { ruler: "Saturn",  element: "air",   modality: "fixed",   guna: "taamasik",  body: "ankles",           varna: "Sudra",     direction: "west",  themes: "charity, philosophical, stoic, hard-working, honest" },
+  "Pisces":      { ruler: "Jupiter", element: "water", modality: "dual",    guna: "saattwik",  body: "feet",             varna: "Brahmana",  direction: "north", themes: "intuitive, emotional, timid, talkative, honest, dreamy" },
+};
+
+// House significations — Ch 7.2. Used by Houses tab.
+const HOUSE_INFO = {
+  1:  { name: "Tanu / Lagna",    themes: "body, complexion, appearance, head, intelligence, strength, fame, nature of birth" },
+  2:  { name: "Dhana",           themes: "wealth, assets, family, speech, eyes, mouth, voice, food" },
+  3:  { name: "Sahaja",          themes: "younger siblings, courage, communication skills, creativity, short travels, arms" },
+  4:  { name: "Sukha",           themes: "mother, vehicles, house, lands, motherland, education, comforts, peace, heart" },
+  5:  { name: "Putra",           themes: "children, poorvapunya (past-life merit), intelligence, mantras, love, authority, fame" },
+  6:  { name: "Shatru / Roga",   themes: "enemies, service, debts, diseases, injuries, agriculture, mental tension" },
+  7:  { name: "Kalatra",         themes: "marriage, spouse, passion, long journeys, partners, business" },
+  8:  { name: "Ayur / Randhra",  themes: "longevity, debts, occult, inheritance, secrets, windfall, genitals" },
+  9:  { name: "Dharma / Bhagya", themes: "father, teacher, fortune, religion, higher studies, foreign travel, dharma, intuition" },
+  10: { name: "Karma",           themes: "profession, career, conduct, fame, honours, self-respect, knees" },
+  11: { name: "Labha",           themes: "elder siblings, income, gains, realisation of hopes, friends, ankles" },
+  12: { name: "Vyaya / Moksha",  themes: "losses, expenditure, imprisonment, bed pleasures, foreign residence, meditation, moksha" },
+};
+
 // Planet significations drawn from Ch 3 (Planets). Each short line cites its
 // source so the UI can show "Sun → self/father/authority (Ch 3.2.3)".
 const PLANET_THEMES = {
@@ -1274,6 +1313,9 @@ async function runLookup(q) {
   const resBox = document.getElementById('lookupResult');
   errBox.classList.add('hidden');
   resBox.classList.add('hidden');
+  ['lookupAboutDetails', 'lookupReading', 'lookupCitations'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.classList.add('hidden');
+  });
   q = (q || '').trim();
   if (!q) return;
   try {
@@ -1314,6 +1356,7 @@ async function runLookup(q) {
         ['Advance in nak.', escapeHtml(d.nakshatra.advance_dms)],
       ]);
     resBox.classList.remove('hidden');
+    _renderLookupBook(d);
   } catch (e) {
     errBox.textContent = 'Lookup error: ' + e.message;
     errBox.classList.remove('hidden');
@@ -1369,6 +1412,51 @@ async function loadHouses() {
     });
   });
   applyHighlight();
+}
+
+// Book-sourced explainer for the Lookup tab. Covers what a rasi, nakshatra,
+// pada and Vimshottari lord are, and what the specific longitude's rasi +
+// nakshatra lord mean — drawing on Ch 1.3.1-5, Ch 2.3, Ch 3.2.3.
+function _renderLookupBook(d) {
+  const aboutEl = document.getElementById('lookupAbout');
+  const aboutDetails = document.getElementById('lookupAboutDetails');
+  const readingEl = document.getElementById('lookupReading');
+  const citeEl = document.getElementById('lookupCitations');
+  if (!aboutEl || !readingEl || !citeEl) return;
+
+  aboutEl.innerHTML =
+    '<p>A <strong>rasi</strong> is a <em>30°</em> zodiacal sign — the zodiac (360°) splits into 12 rasis, each ruled by a planet (Ch 1.3.1 / Ch 2.2).</p>' +
+    '<p>A <strong>nakshatra</strong> is a <em>13°20′</em> lunar mansion — 27 nakshatras tile the zodiac. Each has a ruling deity and a <strong>Vimshottari lord</strong> (a planet) used for the Vimshottari mahadasha timeline (Ch 1.3.2, 1.3.5, Ch 16).</p>' +
+    '<p>A <strong>pada</strong> is a <em>3°20′</em> quarter of a nakshatra — 108 padas in all. The pada is used in charts like the Navamsa (D-9) and in arudha calculations (Ch 1.3.3, Ch 9).</p>' +
+    '<p>The <strong>Vimshottari lord</strong> of the Moon’s nakshatra at birth sets the <em>first mahadasha</em> in a 120-year planetary cycle — it is the single most-used dasha system in Parasari astrology (Ch 16).</p>';
+  aboutDetails.classList.remove('hidden');
+
+  const rasiInfo = RASI_INFO[d.rasi.name];
+  const lordInfo = PLANET_THEMES[d.nakshatra.vimsottari_lord];
+  const deityHint = DEITY_HINTS[d.nakshatra.deity];
+
+  const rasiLine = rasiInfo
+    ? '<p><strong>Rasi ' + escapeHtml(d.rasi.name) + '</strong> (ruled by <strong>' + rasiInfo.ruler + '</strong>, ' +
+      rasiInfo.element + ' · ' + rasiInfo.modality + ' · ' + rasiInfo.guna + ', varna <em>' + rasiInfo.varna + '</em>, body-part <em>' + rasiInfo.body + '</em>) ' +
+      'brings these themes: <em>' + rasiInfo.themes + '</em> (Ch 2.3).</p>'
+    : '';
+  const lordLine = lordInfo
+    ? '<p><strong>Nakshatra lord ' + escapeHtml(d.nakshatra.vimsottari_lord) + '</strong> governs ' + lordInfo.governs + ' (Ch 3.2.3). ' +
+      'Its themes — <em>' + lordInfo.themes + '</em> — colour the entire Vimshottari mahadasha when this nakshatra holds the Moon at birth. (' + lordInfo.benefic + '.)</p>'
+    : '';
+  const deityLine = deityHint
+    ? '<p><strong>Deity ' + escapeHtml(d.nakshatra.deity) + '</strong> — ' + deityHint + '. The deity colours the nakshatra’s inner mood.</p>'
+    : '';
+  const padaLine = '<p>This longitude sits in <strong>pada ' + d.pada.number + '/4</strong> of ' + escapeHtml(d.nakshatra.name) + ' — the pada pins the D-9 (Navamsa) rasi, which is where the nakshatra’s flavour gets concrete.</p>';
+
+  readingEl.innerHTML =
+    '<div class="text-indigo-800 font-semibold mb-1">What this longitude means</div>' +
+    rasiLine + lordLine + deityLine + padaLine;
+  readingEl.classList.remove('hidden');
+
+  citeEl.innerHTML =
+    'Sources — Ch 1.3.1 (Rasis), Ch 1.3.2 (Nakshatras), Ch 1.3.3 (Padas), Ch 1.3.5 (Vimshottari lord), Ch 2.2–2.3 (rasi properties &amp; indications), Ch 3.2.3 (planet governance), Ch 16 (Vimshottari Dasa).';
+  citeEl.classList.remove('hidden');
 }
 
 async function loadLookup() {
