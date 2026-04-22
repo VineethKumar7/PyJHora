@@ -24,6 +24,9 @@ from web import db  # noqa: E402
 from web import life_chart  # noqa: E402
 from web import basics  # noqa: E402
 
+RAASI_NAMES = basics.RAASI_NAMES
+RAASI_SANSKRIT = basics.RAASI_SANSKRIT
+
 utils.get_resource_lists()
 db.init_db()
 
@@ -737,6 +740,112 @@ async def muhurta_api(
         "tally": {"good": good, "neutral": neutral, "avoid": bad},
         "verdict": _muhurta_verdict(good, bad),
         "sunrise": sr[1],
+    })
+
+
+# Solar calendar (Ch 1.3.7). One "day" = 1° of Sun's (sidereal) longitude.
+# One month = Sun moves 30° (one rasi). Year starts at Mesha Sankranti
+# (Sun enters sidereal Aries, ~April 14).
+SOLAR_MONTH_TAMIL = [
+    "Chithirai", "Vaikasi", "Aani", "Aadi", "Aavani", "Purattasi",
+    "Aippasi", "Kaarthigai", "Maargazhi", "Thai", "Maasi", "Panguni",
+]
+SOLAR_MONTH_ASSOC_TROPICAL = [
+    "mid-Apr → mid-May", "mid-May → mid-Jun", "mid-Jun → mid-Jul",
+    "mid-Jul → mid-Aug", "mid-Aug → mid-Sep", "mid-Sep → mid-Oct",
+    "mid-Oct → mid-Nov", "mid-Nov → mid-Dec", "mid-Dec → mid-Jan",
+    "mid-Jan → mid-Feb", "mid-Feb → mid-Mar", "mid-Mar → mid-Apr",
+]
+
+
+def _fmt_sank(sank_date, solar_hour):
+    """sank_date is a Date(y,m,d); solar_hour is a float hour-of-day in local TZ."""
+    y, m, d = sank_date[0], sank_date[1], sank_date[2]
+    h = int(solar_hour) % 24
+    mi = int(round((solar_hour - int(solar_hour)) * 60)) % 60
+    return f"{y:04d}-{m:02d}-{d:02d} {h:02d}:{mi:02d}"
+
+
+@app.post("/api/solar_calendar")
+async def solar_calendar(
+    date: str = Form(...),
+    time: str = Form("12:00"),
+    latitude: float = Form(...),
+    longitude: float = Form(...),
+    timezone: float = Form(...),
+    ayanamsa: Optional[str] = Form(None),
+):
+    _apply_ayanamsa(ayanamsa)
+    place, jd, ymd, _ = _make_place_and_jd(date, time, latitude, longitude, timezone)
+    # Sidereal Sun longitude via the rasi chart (uses active ayanamsa).
+    rasi = charts.rasi_chart(jd, place)
+    sun_sign, sun_deg = rasi[1][1]
+    sun_lon = (sun_sign * 30.0 + sun_deg) % 360.0
+
+    month_index = int(sun_lon // 30)           # 0..11, 0 = Mesha (Aries)
+    advance_in_month = sun_lon - month_index * 30  # 0..30°
+    day_in_month = int(advance_in_month) + 1   # 1..30 (each 1° = 1 day)
+    if day_in_month > 30:
+        day_in_month = 30
+    day_fraction = advance_in_month - (day_in_month - 1)  # 0..1 within current day
+    days_remaining = 30 - day_in_month        # full days still ahead in this month
+
+    # Year progress: solar year starts at Mesha Sankranti (sun_lon = 0).
+    year_day = int(sun_lon) + 1                # 1..360
+    if year_day > 360:
+        year_day = 360
+    year_pct = sun_lon / 360.0
+
+    # Precise sankranti timestamps (bookends of the current solar month).
+    try:
+        prev_date, prev_hour, _pm, _pd = drik.previous_sankranti_date(drik.Date(*ymd), place)
+        sankranti_prev = _fmt_sank(prev_date, prev_hour)
+    except Exception:
+        sankranti_prev = None
+    try:
+        next_date, next_hour, _nm, _nd = drik.next_sankranti_date(drik.Date(*ymd), place)
+        sankranti_next = _fmt_sank(next_date, next_hour)
+    except Exception:
+        sankranti_next = None
+
+    months = []
+    for i in range(12):
+        months.append({
+            "index": i,
+            "number": i + 1,
+            "name": RAASI_NAMES[i] if i < len(RAASI_NAMES) else str(i + 1),
+            "sanskrit": RAASI_SANSKRIT[i] if i < len(RAASI_SANSKRIT) else str(i + 1),
+            "tamil": SOLAR_MONTH_TAMIL[i],
+            "tropical_window": SOLAR_MONTH_ASSOC_TROPICAL[i],
+            "is_current": i == month_index,
+        })
+
+    return JSONResponse({
+        "sun_longitude": round(sun_lon, 4),
+        "month": {
+            "index": month_index,
+            "number": month_index + 1,
+            "name": RAASI_NAMES[month_index],
+            "sanskrit": RAASI_SANSKRIT[month_index],
+            "tamil": SOLAR_MONTH_TAMIL[month_index],
+            "tropical_window": SOLAR_MONTH_ASSOC_TROPICAL[month_index],
+        },
+        "day": {
+            "number": day_in_month,
+            "advance_deg": round(advance_in_month, 4),
+            "fraction_in_day": round(day_fraction, 4),
+            "days_remaining_in_month": days_remaining,
+        },
+        "year": {
+            "day": year_day,
+            "pct": round(year_pct, 6),
+            "total_days": 360,
+        },
+        "sankranti": {
+            "previous": sankranti_prev,
+            "next": sankranti_next,
+        },
+        "months": months,
     })
 
 

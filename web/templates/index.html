@@ -194,6 +194,7 @@
         <button type="button" id="tithiButton"     data-panel="tithiOut"     class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Tithi</button>
         <button type="button" id="yogaButton"      data-panel="yogaOut"      class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Yoga/Karana</button>
         <button type="button" id="muhurtaButton"   data-panel="muhurtaOut"   class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Muhurta</button>
+        <button type="button" id="solarButton"     data-panel="solarOut"     class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Solar Cal</button>
       </div>
       <div class="flex items-center gap-2 order-2 md:order-3">
         <label class="text-xs text-slate-500 hidden lg:inline" for="ayanamsaNav">Ayanamsa</label>
@@ -549,6 +550,55 @@
         <div id="muhurtaVerdict" class="rounded border px-4 py-3 mb-4 text-sm font-medium"></div>
         <div id="muhurtaLimbs" class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-3"></div>
         <div id="muhurtaTally" class="text-xs text-slate-500"></div>
+      </div>
+
+      <div id="solarOut" class="hidden bg-white rounded-lg shadow p-5">
+        <div class="flex items-baseline justify-between border-b pb-2 mb-3 flex-wrap gap-2">
+          <h2 class="font-semibold text-slate-700">Solar Calendar</h2>
+          <span id="solarSubject" class="text-xs text-slate-500"></span>
+        </div>
+        <p class="text-xs text-slate-500 mb-3">
+          Ch 1.3.7 · In the solar calendar, one <em>day</em> equals 1° of Sun's (sidereal)
+          motion and one <em>month</em> equals 30° — so the year is 360 solar days long,
+          starting at Mesha Sankranti (Sun enters Aries, ~14 April).
+        </p>
+        <div class="grid md:grid-cols-3 gap-3 mb-4 text-sm">
+          <div class="bg-amber-50 border border-amber-200 rounded p-3">
+            <div class="text-amber-700 text-xs">Solar month</div>
+            <div id="solarMonthName" class="font-semibold text-amber-900 text-lg"></div>
+            <div id="solarMonthSub" class="text-xs text-amber-700 mt-1"></div>
+          </div>
+          <div class="bg-emerald-50 border border-emerald-200 rounded p-3">
+            <div class="text-emerald-700 text-xs">Day of month</div>
+            <div id="solarDayNum" class="font-semibold text-emerald-900 text-lg"></div>
+            <div id="solarDaySub" class="text-xs text-emerald-700 mt-1"></div>
+          </div>
+          <div class="bg-sky-50 border border-sky-200 rounded p-3">
+            <div class="text-sky-700 text-xs">Day of year</div>
+            <div id="solarYearDay" class="font-semibold text-sky-900 text-lg"></div>
+            <div id="solarYearSub" class="text-xs text-sky-700 mt-1"></div>
+          </div>
+        </div>
+        <div class="mb-4">
+          <div class="flex justify-between text-xs text-slate-500 mb-1">
+            <span id="solarYearStart">Mesha Sankranti</span>
+            <span id="solarYearPctLabel"></span>
+            <span>next Mesha</span>
+          </div>
+          <div class="w-full h-3 rounded bg-slate-200 overflow-hidden">
+            <div id="solarYearBar" class="h-3 bg-gradient-to-r from-amber-400 via-emerald-400 to-sky-500" style="width:0%"></div>
+          </div>
+          <div id="solarSankranti" class="text-xs text-slate-500 mt-2"></div>
+        </div>
+        <div class="text-xs text-slate-500 mb-1">All 12 solar months</div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs">
+            <thead class="bg-slate-50 text-slate-600 uppercase">
+              <tr><th class="px-2 py-1 text-left">#</th><th class="px-2 py-1 text-left">Rasi</th><th class="px-2 py-1 text-left">Sanskrit</th><th class="px-2 py-1 text-left">Tamil</th><th class="px-2 py-1 text-left">Tropical window</th></tr>
+            </thead>
+            <tbody id="solarMonthsTable" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
       </div>
 
       <div id="errOut" class="hidden bg-red-50 border border-red-300 text-red-700 rounded p-3 text-sm"></div>
@@ -1114,6 +1164,7 @@ const TABS = [
   { id: 'tithiButton',     panel: 'tithiOut',     loader: loadTithi },
   { id: 'yogaButton',      panel: 'yogaOut',      loader: loadYogaKarana },
   { id: 'muhurtaButton',   panel: 'muhurtaOut',   loader: loadMuhurta },
+  { id: 'solarButton',     panel: 'solarOut',     loader: loadSolarCal },
 ];
 
 // ---------- Longitude Lookup (Ch 1) ----------
@@ -1314,6 +1365,49 @@ async function loadMuhurta() {
   document.getElementById('muhurtaTally').textContent =
     'Tally: '+d.tally.good+' good · '+d.tally.neutral+' neutral · '+d.tally.avoid+' avoid'+
     (d.sunrise ? '   ·   Sunrise: '+d.sunrise : '');
+}
+
+async function loadSolarCal() {
+  const fd = ensureForm(); if (!fd) return;
+  const r = await fetch('/api/solar_calendar', { method:'POST', body: fd });
+  if (!r.ok) { showErr('Solar calendar failed: '+r.status); return; }
+  const d = await r.json();
+  document.getElementById('solarSubject').textContent = subjectLine(fd);
+
+  document.getElementById('solarMonthName').textContent =
+    d.month.number+'. '+d.month.name+' / '+d.month.sanskrit;
+  document.getElementById('solarMonthSub').textContent =
+    'Tamil: '+d.month.tamil+' · '+d.month.tropical_window;
+
+  document.getElementById('solarDayNum').textContent =
+    'Day '+d.day.number+' / 30';
+  document.getElementById('solarDaySub').textContent =
+    'Sun advanced '+d.day.advance_deg.toFixed(2)+'° into '+d.month.name+
+    ' · '+(d.day.fraction_in_day*100).toFixed(1)+'% through today · '+
+    d.day.days_remaining_in_month+' day(s) left in month';
+
+  document.getElementById('solarYearDay').textContent =
+    'Day '+d.year.day+' / '+d.year.total_days;
+  document.getElementById('solarYearSub').textContent =
+    'Sun at '+d.sun_longitude.toFixed(2)+'° sidereal · '+(d.year.pct*100).toFixed(2)+'% through the solar year';
+
+  const pctStr = (d.year.pct*100).toFixed(1)+'%';
+  document.getElementById('solarYearPctLabel').textContent = pctStr;
+  document.getElementById('solarYearBar').style.width = pctStr;
+
+  const sank = d.sankranti || {};
+  const prevBit = sank.previous ? 'Previous Sankranti (start of '+d.month.name+'): <span class="font-mono">'+escapeHtml(sank.previous)+'</span>' : '';
+  const nextBit = sank.next ? 'Next Sankranti (end of '+d.month.name+'): <span class="font-mono">'+escapeHtml(sank.next)+'</span>' : '';
+  document.getElementById('solarSankranti').innerHTML = [prevBit, nextBit].filter(Boolean).join(' &nbsp;·&nbsp; ');
+
+  document.getElementById('solarMonthsTable').innerHTML = d.months.map(m =>
+    '<tr class="'+(m.is_current?'bg-amber-50 font-semibold text-amber-900':'')+'">' +
+    '<td class="px-2 py-1">'+m.number+'</td>' +
+    '<td class="px-2 py-1">'+escapeHtml(m.name)+'</td>' +
+    '<td class="px-2 py-1">'+escapeHtml(m.sanskrit)+'</td>' +
+    '<td class="px-2 py-1">'+escapeHtml(m.tamil)+'</td>' +
+    '<td class="px-2 py-1 text-slate-500">'+escapeHtml(m.tropical_window)+'</td>' +
+    '</tr>').join('');
 }
 
 function _renderMoonPhase(svgEl, moonMinusSun) {
