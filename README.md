@@ -34,7 +34,6 @@ frontend.
 | 7 | **Yoga + Karana of the day** | 1.3.9–10 | Current yoga with plain-English meaning, current karana (canonical + 60-slot index), full 27-yoga / 11-karana tables. |
 | 8 | **Panchaanga muhurta card** | 1.3.12 | Five-limb verdict (good / neutral / avoid) with an overall "is this moment auspicious?" banner. |
 | 9 | **Solar calendar counter** | 1.3.7 | Sidereal solar month & day-of-month (1..30), day-of-year (1..360), year-progress bar, precise sankranti timestamps. |
-| 10 | **Practice quiz** | — | Auto-generated MCQs drawn from the Ch 1 tables — nakshatra lords, deities, rasi ordinals, longitude→rasi, tithi lord, paksha, pada arc, hora lord, solar-year facts. Score and explanation on every answer. |
 
 ---
 
