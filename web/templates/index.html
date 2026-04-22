@@ -674,6 +674,7 @@
           highlighted.
         </p>
         <div id="rasiExplorerGrid" class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-4"></div>
+        <div id="rasiExplorerWheel" class="grid md:grid-cols-2 gap-4 mb-4"></div>
         <div id="rasiExplorerDossier" class="rounded border border-slate-200 bg-slate-50 p-4 text-sm"></div>
         <details class="mt-4 text-sm">
           <summary class="cursor-pointer text-slate-600 font-medium">About Rasi properties</summary>
@@ -1929,6 +1930,7 @@ async function loadRasiExplorer() {
   });
 
   _renderRasiGrid(nativeMarks);
+  _renderRasiWheels(nativeMarks);
   // Default selection: Lagna, else first sign
   const initial = nativeMarks.lagna || RASI_ORDER[0];
   _renderRasiDossier(initial, nativeMarks);
@@ -2005,6 +2007,124 @@ function _renderRasiDossier(rasiName, marks) {
     occupantBanner +
     '<div class="text-sm">'+rowsHtml+'</div>' +
     themes + indic;
+}
+
+// Donut chart from segments [{label, value, color}]. SVG, no external deps.
+function _donutSvg(segments, total, centerLabel) {
+  const size = 180, r = 70, cx = size/2, cy = size/2, inner = 45;
+  const svgNs = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNs, 'svg');
+  svg.setAttribute('viewBox', '0 0 '+size+' '+size);
+  svg.setAttribute('width', size); svg.setAttribute('height', size);
+  let acc = 0;
+  const safeTotal = total || 1;
+  segments.forEach(seg => {
+    if (seg.value <= 0) return;
+    const startAngle = acc / safeTotal * 2 * Math.PI - Math.PI/2;
+    acc += seg.value;
+    const endAngle   = acc / safeTotal * 2 * Math.PI - Math.PI/2;
+    const large = (seg.value / safeTotal > 0.5) ? 1 : 0;
+    const x1 = cx + r * Math.cos(startAngle), y1 = cy + r * Math.sin(startAngle);
+    const x2 = cx + r * Math.cos(endAngle),   y2 = cy + r * Math.sin(endAngle);
+    const xi1 = cx + inner * Math.cos(endAngle),   yi1 = cy + inner * Math.sin(endAngle);
+    const xi2 = cx + inner * Math.cos(startAngle), yi2 = cy + inner * Math.sin(startAngle);
+    const path = document.createElementNS(svgNs, 'path');
+    path.setAttribute('d',
+      'M '+x1+' '+y1+
+      ' A '+r+' '+r+' 0 '+large+' 1 '+x2+' '+y2+
+      ' L '+xi1+' '+yi1+
+      ' A '+inner+' '+inner+' 0 '+large+' 0 '+xi2+' '+yi2+
+      ' Z'
+    );
+    path.setAttribute('fill', seg.color);
+    svg.appendChild(path);
+  });
+  const label = document.createElementNS(svgNs, 'text');
+  label.setAttribute('x', cx); label.setAttribute('y', cy - 2);
+  label.setAttribute('text-anchor', 'middle'); label.setAttribute('font-size', '14');
+  label.setAttribute('font-weight', '600'); label.setAttribute('fill', '#64748b');
+  label.textContent = centerLabel || (total + ' placements');
+  svg.appendChild(label);
+  const sub = document.createElementNS(svgNs, 'text');
+  sub.setAttribute('x', cx); sub.setAttribute('y', cy + 14);
+  sub.setAttribute('text-anchor', 'middle'); sub.setAttribute('font-size', '10');
+  sub.setAttribute('fill', '#94a3b8');
+  sub.textContent = total > 0 ? 'n = ' + total : '—';
+  svg.appendChild(sub);
+  return svg;
+}
+
+const CLASSICAL_GRAHAS = new Set(['sun','moon','mars','mercury','jupiter','venus','saturn','rahu','ketu']);
+
+function _renderRasiWheels(marks) {
+  const host = document.getElementById('rasiExplorerWheel');
+  if (!host) return;
+  const elemTally = { fire: 0, earth: 0, air: 0, water: 0 };
+  const gunaTally = { saattwik: 0, raajasik: 0, taamasik: 0 };
+  const parityTally = { odd: 0, even: 0 };
+  Object.entries(marks.planets).forEach(([rasi, planets]) => {
+    const info = RASI_INFO[rasi]; if (!info) return;
+    planets.forEach(p => {
+      if (!CLASSICAL_GRAHAS.has(String(p).toLowerCase())) return;
+      if (info.element in elemTally) elemTally[info.element]++;
+      if (info.guna in gunaTally)    gunaTally[info.guna]++;
+      if (info.parity in parityTally) parityTally[info.parity]++;
+    });
+  });
+  const total = Object.values(elemTally).reduce((a,b)=>a+b,0);
+
+  const elemSegs = [
+    { label: 'fire',  value: elemTally.fire,  color: '#fb923c' },
+    { label: 'earth', value: elemTally.earth, color: '#84cc16' },
+    { label: 'air',   value: elemTally.air,   color: '#38bdf8' },
+    { label: 'water', value: elemTally.water, color: '#3b82f6' },
+  ];
+  const gunaSegs = [
+    { label: 'sattva', value: gunaTally.saattwik, color: '#fbbf24' },
+    { label: 'rajas',  value: gunaTally.raajasik, color: '#fb7185' },
+    { label: 'tamas',  value: gunaTally.taamasik, color: '#64748b' },
+  ];
+  const parSegs = [
+    { label: 'odd / viṣama (male)',  value: parityTally.odd,  color: '#a78bfa' },
+    { label: 'even / sama (female)', value: parityTally.even, color: '#f472b6' },
+  ];
+
+  const legend = segs => segs.map(s =>
+    '<div class="flex items-center gap-1 text-xs"><span class="inline-block w-3 h-3 rounded-sm" style="background:'+s.color+'"></span>'+s.label+' <span class="text-slate-500">'+s.value+'</span></div>'
+  ).join('');
+
+  host.innerHTML = '';
+  if (total === 0) {
+    host.innerHTML = '<div class="text-xs text-slate-500 italic">No planet placements found — load a birth chart to see element/guna distribution.</div>';
+    return;
+  }
+
+  const topElem = elemSegs.slice().sort((a,b) => b.value - a.value)[0];
+  const topGuna = gunaSegs.slice().sort((a,b) => b.value - a.value)[0];
+
+  const card1 = document.createElement('div');
+  card1.className = 'rounded border border-slate-200 bg-white p-3';
+  card1.innerHTML = '<div class="text-xs text-slate-500 mb-1 font-medium">Element distribution <span class="text-slate-400">(Ch 2.2.5)</span></div><div class="flex items-center gap-3"><div id="_donut_elem"></div><div class="flex flex-col gap-1">'+legend(elemSegs)+'<div class="text-[11px] text-slate-500 mt-1"><strong>'+topElem.label+'</strong>-heavy</div></div></div>';
+  host.appendChild(card1);
+  card1.querySelector('#_donut_elem').appendChild(_donutSvg(elemSegs, total, 'Elements'));
+
+  const card2 = document.createElement('div');
+  card2.className = 'rounded border border-slate-200 bg-white p-3';
+  card2.innerHTML = '<div class="text-xs text-slate-500 mb-1 font-medium">Guna distribution <span class="text-slate-400">(Ch 2.2.7)</span></div><div class="flex items-center gap-3"><div id="_donut_guna"></div><div class="flex flex-col gap-1">'+legend(gunaSegs)+'<div class="text-[11px] text-slate-500 mt-1"><strong>'+topGuna.label+'</strong>-heavy</div></div></div>';
+  host.appendChild(card2);
+  card2.querySelector('#_donut_guna').appendChild(_donutSvg(gunaSegs, total, 'Gunas'));
+
+  // Optional third small panel: parity (odd/even) — commonly asked question
+  const card3 = document.createElement('div');
+  card3.className = 'md:col-span-2 rounded border border-slate-200 bg-white p-3';
+  const tp = parityTally.odd + parityTally.even;
+  const oddPct = tp > 0 ? Math.round(parityTally.odd / tp * 100) : 0;
+  card3.innerHTML = '<div class="text-xs text-slate-500 mb-2 font-medium">Parity distribution <span class="text-slate-400">(Ch 2.2.2)</span></div>' +
+    '<div class="flex items-center gap-3 text-xs">' +
+      '<div class="flex-1 h-3 bg-slate-200 rounded overflow-hidden flex"><div class="h-full" style="width:'+oddPct+'%; background:#a78bfa"></div><div class="h-full" style="width:'+(100-oddPct)+'%; background:#f472b6"></div></div>' +
+      '<div class="flex gap-3">'+legend(parSegs)+'</div>' +
+    '</div>';
+  host.appendChild(card3);
 }
 
 function _renderRasiExplorerAbout() {
