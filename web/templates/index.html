@@ -574,6 +574,12 @@
             </div>
           </div>
         </div>
+        <details class="mt-5 border-t pt-3" open>
+          <summary class="font-semibold text-slate-700 cursor-pointer">About Yoga &amp; Karana <span class="text-xs text-slate-400 font-normal">(from the book)</span></summary>
+          <div id="yogaAbout" class="text-sm text-slate-600 space-y-2 mt-2"></div>
+        </details>
+        <div id="yogaReading" class="mt-4 rounded border border-indigo-200 bg-indigo-50 p-4 text-sm"></div>
+        <div id="yogaCitations" class="mt-2 text-xs text-slate-500 italic"></div>
       </div>
 
       <div id="muhurtaOut" class="hidden bg-white rounded-lg shadow p-5">
@@ -1558,6 +1564,44 @@ async function loadYogaKarana() {
     '<td class="px-2 py-1">'+escapeHtml(k.name)+'</td>' +
     '<td class="px-2 py-1 text-slate-500">'+escapeHtml(k.nature)+'</td>' +
     '</tr>').join('');
+  _renderYogaBook(d);
+}
+
+// Book-sourced explainer for the Yoga/Karana tab. Ch 1.3.9 defines yoga;
+// Ch 1.3.10 defines karana; Ch 36 governs the classical "use for auspicious
+// acts?" question.
+function _renderYogaBook(d) {
+  const aboutEl = document.getElementById('yogaAbout');
+  const readingEl = document.getElementById('yogaReading');
+  const citeEl = document.getElementById('yogaCitations');
+  if (!aboutEl || !readingEl || !citeEl) return;
+
+  aboutEl.innerHTML =
+    '<p>A <strong>yoga</strong> is a 13°20′ slice of <em>(Sun° + Moon°)</em> — the running sum of Sun and Moon longitudes divided into 27 equal parts (Ch 1.3.9). Each carries a flavour, from auspicious (<em>Siddha, Sadhya, Shubha</em>) to harsh (<em>Vishkambha, Ganda, Vaidhriti, Vyatipata</em>). Classical muhurta texts skip the four harsh yogas for major starts.</p>' +
+    '<p>A <strong>karana</strong> is <em>half a tithi</em> (a 6° slice of Moon − Sun). There are <strong>11 canonical karanas</strong>: 7 that cycle repeatedly through most of the month ("moving") and 4 fixed karanas clustered around the new-moon boundary (Ch 1.3.10). Across one 30-tithi month there are 60 karana slots in total.</p>' +
+    '<p>The current yoga and karana combine with the tithi, vaara (weekday), and nakshatra to form the <strong>panchaanga</strong> — the five-limb muhurta check (see the Muhurta tab).</p>';
+
+  const harsh = new Set(['Vishkambha', 'Ganda', 'Vaidhriti', 'Vyatipata', 'Atiganda', 'Soola', 'Parigha', 'Vajra', 'Vyaghata']);
+  const yogaHarsh = harsh.has(d.yoga.name);
+  const fixedKarana = new Set(['Sakuni', 'Chatushpada', 'Naga', 'Kimstughna']);
+  const karanaFixed = fixedKarana.has(d.karana.name);
+
+  const yogaLine = '<p><strong>Yoga ' + d.yoga.number + ' (' + escapeHtml(d.yoga.name) + ')</strong> — ' + escapeHtml(d.yoga.meaning || '') + '. ' +
+    (yogaHarsh
+      ? '<span class="text-rose-700">This is one of the harsh yogas classically avoided for auspicious beginnings (Ch 36).</span>'
+      : 'Not on the classical "avoid" list — usable for the task types its meaning suggests.') + '</p>';
+  const karanaLine = '<p><strong>Karana ' + d.karana.canonical_number + ' (' + escapeHtml(d.karana.name) + ')</strong> — ' + escapeHtml(d.karana.nature || '') + '. ' +
+    (karanaFixed
+      ? '<span class="text-slate-700">This is one of the four <em>fixed</em> karanas around new moon — it does not repeat monthly.</span>'
+      : 'This is a <em>moving</em> karana — one of the 7 that cycle through the month.') +
+    ' Month slot ' + d.karana.slot + '/60.</p>';
+
+  readingEl.innerHTML =
+    '<div class="text-indigo-800 font-semibold mb-1">What this yoga &amp; karana mean — right now</div>' +
+    yogaLine + karanaLine;
+
+  citeEl.innerHTML =
+    'Sources — Ch 1.3.9 (Yogas &amp; Table 5 meanings), Ch 1.3.10 (Karanas — 11 canonical / 60 slots), Ch 36 (Muhurta — harsh yogas to avoid).';
 }
 
 async function loadMuhurta() {
