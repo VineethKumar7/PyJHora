@@ -22,6 +22,7 @@ from jhora.horoscope.dhasa.graha import vimsottari  # noqa: E402
 
 from web import db  # noqa: E402
 from web import life_chart  # noqa: E402
+from web import basics  # noqa: E402
 
 utils.get_resource_lists()
 db.init_db()
@@ -176,6 +177,15 @@ async def geocode(q: str = Query(..., min_length=2), limit: int = Query(6, ge=1,
 @app.get("/api/ayanamsa_list")
 async def ayanamsa_list():
     return {"modes": AYANAMSA_MODES, "default": DEFAULT_AYANAMSA}
+
+
+@app.get("/api/longitude_lookup")
+async def longitude_lookup(q: str = Query(..., min_length=1, description="e.g. '94°19'', '25 Li 31', '5s 17° 45''")):
+    try:
+        data, canonical = basics.lookup(q)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return {"input": q, "canonical": canonical, **data}
 
 
 @app.post("/api/panchangam")

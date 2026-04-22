@@ -1,0 +1,212 @@
+{
+  "main": {
+    "id": "45d3a0101b031133",
+    "type": "split",
+    "children": [
+      {
+        "id": "550c336a28b48e4b",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "0849546ba30333c2",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "docs/book/chapters/ch01_basic_concepts.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "ch01_basic_concepts"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "d0541d27da1a030e",
+    "type": "split",
+    "children": [
+      {
+        "id": "5cf8d89247df8ca9",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "ec534a11e3749c16",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "fd7188fe57c6b0f5",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "36cbb873cc2f533b",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "706c5334028cb075",
+    "type": "split",
+    "children": [
+      {
+        "id": "23008d620baea8ef",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "3c2bd4b934cbb546",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "docs/book/chapters/ch01_basic_concepts.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for ch01_basic_concepts"
+            }
+          },
+          {
+            "id": "76f5537b2c9dd852",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "docs/book/chapters/ch01_basic_concepts.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from ch01_basic_concepts"
+            }
+          },
+          {
+            "id": "b9f8da181f2ccd28",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "d98f458fca115e58",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "ca53bf952eb6c0ca",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "docs/book/chapters/ch01_basic_concepts.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of ch01_basic_concepts"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "0849546ba30333c2",
+  "lastOpenFiles": [
+    "web/data/pyjhora.db-journal",
+    "web/templates/index.html.tmp.353418.1776756938365",
+    "web/templates/index.html.tmp.353418.1776756925461",
+    "web/templates/index.html.tmp.353418.1776756913066",
+    "web/templates/index.html.tmp.353418.1776756905718",
+    "web/main.py.tmp.353418.1776756897919",
+    "web/life_chart.py.tmp.353418.1776756890460",
+    "web/life_chart.py.tmp.353418.1776756880537",
+    "web/life_chart.py.tmp.353418.1776756876201",
+    "web/life_chart.py.tmp.353418.1776756859411",
+    "web/life_chart.py.tmp.353418.1776756847315",
+    "docs/book/README.md",
+    "docs/book/chapters/ch01_basic_concepts.md",
+    "docs/book/chapters/images/ch37_p0515_2.png",
+    "docs/book/chapters/images/ch37_p0513_1.png",
+    "docs/book/chapters/images/ch37_p0512_1.png",
+    "docs/book/chapters/images/ch37_p0510_1.png",
+    "docs/book/chapters/images/ch37_p0509_1.png",
+    "docs/book/chapters/images/ch37_p0507_1.png",
+    "docs/book/chapters/images/ch37_p0506_1.png",
+    "docs/book/chapters/images/ch37_p0505_1.png",
+    "docs/book/chapters/images/ch37_p0503_1.png",
+    "docs/book/chapters/images/ch37_p0502_1.png"
+  ]
+}

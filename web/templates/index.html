@@ -187,6 +187,7 @@
         <button type="button" id="bhavaButton"     data-panel="bhavaOut"     class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Bhava</button>
         <button type="button" id="dashaButton"     data-panel="dashaOut"     class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Dasha</button>
         <button type="button" id="lifeChartButton" data-panel="lifeChartOut" class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Life Chart</button>
+        <button type="button" id="lookupButton"    data-panel="lookupOut"    class="tab-btn px-3 py-1.5 rounded text-sm font-medium text-slate-600 hover:bg-slate-100">Lookup</button>
       </div>
       <div class="flex items-center gap-2 order-2 md:order-3">
         <label class="text-xs text-slate-500 hidden lg:inline" for="ayanamsaNav">Ayanamsa</label>
@@ -372,6 +373,37 @@
             uses transits, Ashtakavarga, aspects and yogas that aren't modelled here yet.
           </p>
         </details>
+      </div>
+
+      <div id="lookupOut" class="hidden bg-white rounded-lg shadow p-5">
+        <div class="flex items-baseline justify-between border-b pb-2 mb-3 flex-wrap gap-2">
+          <h2 class="font-semibold text-slate-700">Longitude Lookup</h2>
+          <span class="text-xs text-slate-400">Ch 1 · Rasi · Nakshatra · Pada</span>
+        </div>
+        <p class="text-xs text-slate-500 mb-3">
+          Enter any longitude — examples:
+          <code class="bg-slate-100 px-1 rounded">94°19'</code>
+          <code class="bg-slate-100 px-1 rounded">25 Li 31</code>
+          <code class="bg-slate-100 px-1 rounded">5s 17° 45'</code>
+          <code class="bg-slate-100 px-1 rounded">197.33</code>
+        </p>
+        <div class="flex flex-wrap gap-2 mb-3">
+          <input id="lookupInput" type="text" placeholder="e.g. 25 Li 31"
+                 class="flex-1 min-w-[220px] border rounded px-3 py-2 text-sm" autocomplete="off"/>
+          <button type="button" id="lookupRun"
+                  class="bg-indigo-600 hover:bg-indigo-700 text-white rounded px-4 py-2 text-sm font-medium">Lookup</button>
+        </div>
+        <div class="flex flex-wrap gap-1 mb-3 text-xs text-slate-500">
+          <span class="mr-1">Try:</span>
+          <button type="button" class="lookup-example underline hover:text-indigo-600" data-q="94°19'">94°19'</button>
+          <button type="button" class="lookup-example underline hover:text-indigo-600" data-q="5s 17° 45'">5s 17° 45'</button>
+          <button type="button" class="lookup-example underline hover:text-indigo-600" data-q="25 Li 31">25 Li 31</button>
+          <button type="button" class="lookup-example underline hover:text-indigo-600" data-q="0">0°</button>
+          <button type="button" class="lookup-example underline hover:text-indigo-600" data-q="180">180°</button>
+          <button type="button" class="lookup-example underline hover:text-indigo-600" data-q="23°30'">23°30'</button>
+        </div>
+        <div id="lookupErr" class="hidden bg-red-50 border border-red-300 text-red-700 rounded p-2 text-xs mb-3"></div>
+        <div id="lookupResult" class="hidden grid md:grid-cols-3 gap-3"></div>
       </div>
 
       <div id="errOut" class="hidden bg-red-50 border border-red-300 text-red-700 rounded p-3 text-sm"></div>
@@ -734,7 +766,84 @@ const TABS = [
   { id: 'bhavaButton',     panel: 'bhavaOut',     loader: loadBhava },
   { id: 'dashaButton',     panel: 'dashaOut',     loader: loadDasha },
   { id: 'lifeChartButton', panel: 'lifeChartOut', loader: loadLifeChart },
+  { id: 'lookupButton',    panel: 'lookupOut',    loader: loadLookup },
 ];
+
+// ---------- Longitude Lookup (Ch 1) ----------
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function runLookup(q) {
+  const errBox = document.getElementById('lookupErr');
+  const resBox = document.getElementById('lookupResult');
+  errBox.classList.add('hidden');
+  resBox.classList.add('hidden');
+  q = (q || '').trim();
+  if (!q) return;
+  try {
+    const r = await fetch('/api/longitude_lookup?q=' + encodeURIComponent(q));
+    const d = await r.json();
+    if (!r.ok) {
+      errBox.textContent = d.error || ('Lookup failed: ' + r.status);
+      errBox.classList.remove('hidden');
+      return;
+    }
+    const card = (title, rows) =>
+      '<div class="border border-slate-200 rounded p-3 bg-slate-50">' +
+      '<div class="text-xs uppercase tracking-wide text-slate-500 mb-2">' + title + '</div>' +
+      rows.map(([k, v]) =>
+        '<div class="flex justify-between gap-2 py-0.5 text-sm">' +
+        '<span class="text-slate-500">' + escapeHtml(k) + '</span>' +
+        '<span class="font-medium text-slate-800 text-right">' + v + '</span>' +
+        '</div>').join('') +
+      '</div>';
+    resBox.innerHTML =
+      card('Canonical', [
+        ['Decimal', d.longitude.toFixed(4) + '°'],
+        ['D°M\'S"', escapeHtml(d.longitude_dms)],
+        ['Signs form', escapeHtml(d.signs_form)],
+      ]) +
+      card('Rasi (' + escapeHtml(d.rasi.abbr) + ')', [
+        ['Name', escapeHtml(d.rasi.name)],
+        ['Sanskrit', escapeHtml(d.rasi.sanskrit)],
+        ['Sign #', d.rasi.number],
+        ['Advance', escapeHtml(d.rasi.advance_dms)],
+      ]) +
+      card('Nakshatra & Pada', [
+        ['Name', escapeHtml(d.nakshatra.name)],
+        ['Number', d.nakshatra.number + ' / 27'],
+        ['Vimsottari Lord', '<span class="text-indigo-700">' + escapeHtml(d.nakshatra.vimsottari_lord) + '</span>'],
+        ['Deity', escapeHtml(d.nakshatra.deity)],
+        ['Pada', d.pada.number + ' / 4'],
+        ['Advance in nak.', escapeHtml(d.nakshatra.advance_dms)],
+      ]);
+    resBox.classList.remove('hidden');
+  } catch (e) {
+    errBox.textContent = 'Lookup error: ' + e.message;
+    errBox.classList.remove('hidden');
+  }
+}
+
+async function loadLookup() {
+  // Nothing to preload; attach handlers once.
+  const input = document.getElementById('lookupInput');
+  const btn = document.getElementById('lookupRun');
+  if (btn && !btn.dataset.bound) {
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => runLookup(input.value));
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); runLookup(input.value); }
+    });
+    document.querySelectorAll('.lookup-example').forEach(b => {
+      b.addEventListener('click', () => {
+        input.value = b.dataset.q;
+        runLookup(b.dataset.q);
+      });
+    });
+  }
+  if (input) input.focus();
+}
 
 function showOnlyPanel(panelId) {
   TABS.forEach(t => {

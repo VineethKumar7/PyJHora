@@ -5,8 +5,10 @@ Reads   : docs/book/chapters/*.md
 Writes  : docs/book/embeddings.npz  (chunks, metadata, float32 embeddings)
 
 Embedding model: sentence-transformers/all-MiniLM-L6-v2 (384-d, ~90 MB, CPU-ok).
-Chunk size defaults to ~350 words with 60-word overlap — tuned so each chunk
-lands around 500 tokens (the sweet spot for retrieval quality with this model).
+Default chunk unit is one markdown **paragraph** — blocks separated by blank
+lines. Tables and image links stay as their own paragraphs so search can land
+on a specific table or diagram. ``--words`` switches back to sliding word
+windows if you want coarser retrieval.
 """
 from __future__ import annotations
 
@@ -38,8 +40,11 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
     return meta, text[m.end():]
 
 
+IMAGE_ONLY_RE = re.compile(r"^!\[[^\]]*\]\([^\)]+\)\s*$")
+
+
 def chunk_text(text: str, words_per_chunk: int, overlap: int) -> list[tuple[int, int, str]]:
-    """Yield ``(word_start, word_end, chunk_text)``."""
+    """Yield ``(word_start, word_end, chunk_text)`` using sliding word windows."""
     words = text.split()
     if not words:
         return []
@@ -55,6 +60,49 @@ def chunk_text(text: str, words_per_chunk: int, overlap: int) -> list[tuple[int,
     return out
 
 
+def chunk_paragraphs(
+    text: str,
+    min_chars: int,
+    merge_under: int,
+) -> list[tuple[str, str]]:
+    """Yield ``(kind, paragraph_text)`` where kind is 'text' | 'table' | 'image'.
+
+    A paragraph is a block separated by blank lines. Very short paragraphs
+    (e.g. stray section-number lines) are merged forward into the next one so
+    we do not litter the index with near-empty chunks.
+    """
+    raw_paras = re.split(r"\n\s*\n+", text)
+    cleaned: list[tuple[str, str]] = []
+    buffer = ""
+    for raw in raw_paras:
+        para = raw.strip()
+        if not para:
+            continue
+        if IMAGE_ONLY_RE.match(para):
+            if buffer:
+                cleaned.append(("text", buffer.strip()))
+                buffer = ""
+            cleaned.append(("image", para))
+            continue
+        if para.lstrip().startswith("|") and "|" in para:
+            if buffer:
+                cleaned.append(("text", buffer.strip()))
+                buffer = ""
+            cleaned.append(("table", para))
+            continue
+        candidate = (buffer + "\n\n" + para).strip() if buffer else para
+        if len(candidate) < merge_under:
+            buffer = candidate
+            continue
+        cleaned.append(("text", candidate))
+        buffer = ""
+    if buffer:
+        cleaned.append(("text", buffer.strip()))
+
+    # Drop noise that is still below the minimum size.
+    return [(k, p) for k, p in cleaned if len(p) >= min_chars or k in {"table", "image"}]
+
+
 def first_heading(text: str) -> str:
     for line in text.splitlines():
         s = line.strip()
@@ -68,8 +116,14 @@ def main() -> int:
     ap.add_argument("--chapters", type=Path, default=CHAPTERS_DIR)
     ap.add_argument("--out", type=Path, default=OUT_PATH)
     ap.add_argument("--model", default="sentence-transformers/all-MiniLM-L6-v2")
-    ap.add_argument("--words", type=int, default=350, help="words per chunk")
-    ap.add_argument("--overlap", type=int, default=60, help="word overlap")
+    ap.add_argument(
+        "--mode", choices=["paragraph", "window"], default="paragraph",
+        help="paragraph: one chunk per MD paragraph; window: sliding words",
+    )
+    ap.add_argument("--words", type=int, default=350, help="window mode: words per chunk")
+    ap.add_argument("--overlap", type=int, default=60, help="window mode: word overlap")
+    ap.add_argument("--min-chars", type=int, default=40, help="paragraph mode: drop shorter text paragraphs")
+    ap.add_argument("--merge-under", type=int, default=80, help="paragraph mode: merge a short paragraph into the next")
     ap.add_argument("--batch", type=int, default=64)
     args = ap.parse_args()
 
@@ -93,21 +147,32 @@ def main() -> int:
         fm, body = parse_frontmatter(raw)
         # Drop the top H1 so the body we embed is the actual prose.
         body = re.sub(r"^#[^\n]*\n", "", body, count=1).strip()
-        for i, (ws, we, chunk) in enumerate(
-            chunk_text(body, args.words, args.overlap)
-        ):
-            chunks.append(chunk)
-            meta.append({
-                "chapter": int(fm.get("chapter", 0) or 0),
-                "title": fm.get("title", first_heading(body)),
-                "part": fm.get("part", ""),
-                "file": f"chapters/{path.name}",
-                "start_page": int(fm.get("start_page", 0) or 0),
-                "end_page": int(fm.get("end_page", 0) or 0),
-                "chunk_index": i,
-                "word_start": ws,
-                "word_end": we,
-            })
+        base = {
+            "chapter": int(fm.get("chapter", 0) or 0),
+            "title": fm.get("title", first_heading(body)),
+            "part": fm.get("part", ""),
+            "file": f"chapters/{path.name}",
+            "start_page": int(fm.get("start_page", 0) or 0),
+            "end_page": int(fm.get("end_page", 0) or 0),
+        }
+        if args.mode == "paragraph":
+            for i, (kind, para) in enumerate(
+                chunk_paragraphs(body, args.min_chars, args.merge_under)
+            ):
+                chunks.append(para)
+                meta.append({**base, "chunk_index": i, "kind": kind})
+        else:
+            for i, (ws, we, chunk) in enumerate(
+                chunk_text(body, args.words, args.overlap)
+            ):
+                chunks.append(chunk)
+                meta.append({
+                    **base,
+                    "chunk_index": i,
+                    "kind": "text",
+                    "word_start": ws,
+                    "word_end": we,
+                })
 
     print(f"Embedding {len(chunks)} chunks…")
     emb = model.encode(
