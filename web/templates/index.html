@@ -479,6 +479,12 @@
             <tbody id="horaTable" class="divide-y divide-slate-100"></tbody>
           </table>
         </div>
+        <details class="mt-5 border-t pt-3" open>
+          <summary class="font-semibold text-slate-700 cursor-pointer">About the Hora system <span class="text-xs text-slate-400 font-normal">(from the book)</span></summary>
+          <div id="horaAbout" class="text-sm text-slate-600 space-y-2 mt-2"></div>
+        </details>
+        <div id="horaReading" class="mt-4 rounded border border-indigo-200 bg-indigo-50 p-4 text-sm"></div>
+        <div id="horaCitations" class="mt-2 text-xs text-slate-500 italic"></div>
       </div>
 
       <div id="maasaOut" class="hidden bg-white rounded-lg shadow p-5">
@@ -1883,6 +1889,44 @@ async function loadHora() {
     rows.push('<tr>'+cellA+cellB+'</tr>');
   }
   body.innerHTML = rows.join('');
+  _renderHoraBook(d);
+}
+
+// Book-sourced explainer for the Hora tab. Ch 1.3.11 defines the ~1h hora
+// slots ruled by planets in decreasing-speed order. We pull the current
+// hora lord's significations from Ch 3.2.3 via PLANET_THEMES.
+function _renderHoraBook(d) {
+  const aboutEl = document.getElementById('horaAbout');
+  const readingEl = document.getElementById('horaReading');
+  const citeEl = document.getElementById('horaCitations');
+  if (!aboutEl || !readingEl || !citeEl) return;
+
+  aboutEl.innerHTML =
+    '<p>The day from <em>sunrise → next sunrise</em> is split into 24 equal slices of ~1 hour each, called <strong>horas</strong> (Ch 1.3.11).</p>' +
+    '<p>Hora 1 is ruled by the <strong>weekday lord</strong> (Sunday → Sun, Monday → Moon, Tuesday → Mars, Wednesday → Mercury, Thursday → Jupiter, Friday → Venus, Saturday → Saturn). Subsequent horas follow the <em>decreasing geocentric-speed</em> order of the 7 classical planets: <strong>Saturn → Jupiter → Mars → Sun → Venus → Mercury → Moon</strong>, then repeats.</p>' +
+    '<p>The hora lord colours the quality of that hour — its themes are favoured during its hora. Classical muhurta texts pick horas whose lord matches the task (e.g. Mercury hora for learning, Jupiter for rituals, Venus for marriage).</p>';
+
+  const lordInfo = PLANET_THEMES[d.hora_lord];
+  const dayLordInfo = PLANET_THEMES[d.weekday_lord];
+  const lordLine = lordInfo
+    ? '<strong>' + escapeHtml(d.hora_lord) + '</strong> governs <em>' + lordInfo.governs + '</em> (Ch 3.2.3). ' +
+      'Themes: <em>' + lordInfo.themes + '</em>. This is the flavour of the next ~60 minutes.'
+    : '<strong>' + escapeHtml(d.hora_lord) + '</strong> rules this hora.';
+  const dayLordLine = dayLordInfo
+    ? 'Today is <strong>' + escapeHtml(d.weekday) + '</strong> — its overall tone comes from <strong>' + escapeHtml(d.weekday_lord) + '</strong> (' + dayLordInfo.governs + '). Tasks aligned with ' + dayLordInfo.themes + ' tend to flow.'
+    : '';
+  const favour = lordInfo
+    ? 'Favoured now: acts in line with <em>' + lordInfo.themes + '</em>. Harder now: acts that fight the hora lord’s nature.'
+    : '';
+
+  readingEl.innerHTML =
+    '<div class="text-indigo-800 font-semibold mb-1">What this hora means — right now</div>' +
+    '<p class="mb-1.5">' + lordLine + '</p>' +
+    (dayLordLine ? '<p class="mb-1.5 text-slate-700">' + dayLordLine + '</p>' : '') +
+    (favour ? '<p class="text-slate-700">' + favour + '</p>' : '');
+
+  citeEl.innerHTML =
+    'Sources — Ch 1.3.11 (Horas &amp; planetary-speed order), Ch 3.2.3 (Planets &amp; what they govern), Ch 36 (Muhurta — matching task to hora lord).';
 }
 
 function showOnlyPanel(panelId) {
