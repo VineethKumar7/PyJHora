@@ -334,6 +334,72 @@ async def panchangam(
     })
 
 
+# Hora-of-the-hour (Ch 1.3.11): planetary lord of the current 1-hour slice after sunrise.
+# Order of planets by decreasing geocentric speed (used to step from day-lord):
+HORA_ORDER = ["Saturn", "Jupiter", "Mars", "Sun", "Venus", "Mercury", "Moon"]
+# drik.vaara returns 0..6 where 0=Sunday. Map weekday index -> planetary day-lord:
+WEEKDAY_LORD = ["Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn"]
+
+
+@app.post("/api/hora_hour")
+async def hora_hour(
+    date: str = Form(...),
+    time: str = Form(...),
+    latitude: float = Form(...),
+    longitude: float = Form(...),
+    timezone: float = Form(...),
+):
+    place, jd, _, _ = _make_place_and_jd(date, time, latitude, longitude, timezone)
+    hh, mm = [int(x) for x in time.split(":")[:2]]
+    event_local_hours = hh + mm / 60.0
+
+    sr = drik.sunrise(jd, place)
+    sunrise_hours = sr[0]
+    sunrise_label = sr[1]
+
+    vaara_num = drik.vaara(jd, place)
+    day_name = utils.DAYS_LIST[vaara_num] if 0 <= vaara_num < 7 else str(vaara_num)
+    day_lord = WEEKDAY_LORD[vaara_num] if 0 <= vaara_num < 7 else "?"
+
+    # Hours elapsed since sunrise (wrap to next-day if event is before sunrise,
+    # treating pre-sunrise hours as belonging to the *previous* day's cycle).
+    elapsed = event_local_hours - sunrise_hours
+    if elapsed < 0:
+        elapsed += 24.0
+        prev_vaara = (vaara_num - 1) % 7
+        day_name = utils.DAYS_LIST[prev_vaara] + " (previous sunrise)"
+        day_lord = WEEKDAY_LORD[prev_vaara]
+
+    hora_index = int(elapsed) + 1  # 1-based
+    if hora_index > 24:
+        hora_index = 24
+
+    # Step `hora_index - 1` places forward in HORA_ORDER, starting at day_lord.
+    try:
+        start_pos = HORA_ORDER.index(day_lord)
+    except ValueError:
+        start_pos = 0
+    lord_pos = (start_pos + hora_index - 1) % 7
+    hora_lord = HORA_ORDER[lord_pos]
+
+    sequence = []
+    for i in range(24):
+        pos = (start_pos + i) % 7
+        sequence.append({"hora": i + 1, "lord": HORA_ORDER[pos], "is_current": (i + 1) == hora_index})
+
+    return JSONResponse({
+        "sunrise": sunrise_label,
+        "weekday": day_name,
+        "weekday_lord": day_lord,
+        "event_time": f"{hh:02d}:{mm:02d}",
+        "elapsed_hours": round(elapsed, 3),
+        "hora_index": hora_index,
+        "hora_lord": hora_lord,
+        "hora_order": HORA_ORDER,
+        "sequence": sequence,
+    })
+
+
 @app.post("/api/chart")
 async def chart(
     date: str = Form(...),
