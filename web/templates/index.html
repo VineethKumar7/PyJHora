@@ -595,6 +595,12 @@
         <div id="muhurtaVerdict" class="rounded border px-4 py-3 mb-4 text-sm font-medium"></div>
         <div id="muhurtaLimbs" class="grid sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-3"></div>
         <div id="muhurtaTally" class="text-xs text-slate-500"></div>
+        <details class="mt-5 border-t pt-3" open>
+          <summary class="font-semibold text-slate-700 cursor-pointer">About Panchaanga Muhurta <span class="text-xs text-slate-400 font-normal">(from the book)</span></summary>
+          <div id="muhurtaAbout" class="text-sm text-slate-600 space-y-2 mt-2"></div>
+        </details>
+        <div id="muhurtaReading" class="mt-4 rounded border border-indigo-200 bg-indigo-50 p-4 text-sm"></div>
+        <div id="muhurtaCitations" class="mt-2 text-xs text-slate-500 italic"></div>
       </div>
 
       <div id="solarOut" class="hidden bg-white rounded-lg shadow p-5">
@@ -1647,6 +1653,51 @@ async function loadMuhurta() {
   document.getElementById('muhurtaTally').textContent =
     'Tally: '+d.tally.good+' good · '+d.tally.neutral+' neutral · '+d.tally.avoid+' avoid'+
     (d.sunrise ? '   ·   Sunrise: '+d.sunrise : '');
+
+  _renderMuhurtaBook(d);
+}
+
+// Book-sourced explainer for the Panchaanga Muhurta tab. Ch 1.3.12 motivates
+// the 5-limb check; Ch 36 is the full muhurta treatment.
+function _renderMuhurtaBook(d) {
+  const aboutEl = document.getElementById('muhurtaAbout');
+  const readingEl = document.getElementById('muhurtaReading');
+  const citeEl = document.getElementById('muhurtaCitations');
+  if (!aboutEl || !readingEl || !citeEl) return;
+
+  aboutEl.innerHTML =
+    '<p><strong>Muhurta</strong> is electional astrology — picking an auspicious <em>moment</em> to start an act so the sky supports it (Ch 36.1). The <strong>panchaanga</strong> (five-limb) check is the classical starting point.</p>' +
+    '<p>The five limbs are:</p>' +
+    '<ul class="list-disc ml-5 space-y-1">' +
+    '<li><strong>Tithi</strong> — Moon–Sun phase. Classical "avoid" set: Rikta tithis (4, 9, 14, 19, 24, 29), Chaturdasi, Amavasya (Ch 36.3).</li>' +
+    '<li><strong>Vaara</strong> — weekday. Malefic weekdays (Sat, Tue, Sun) are avoided for soft acts; benefic weekdays (Mon, Wed, Thu, Fri) favoured.</li>' +
+    '<li><strong>Nakshatra</strong> — lunar mansion. Each task type has a favoured set of nakshatras (Ch 36.4 tables).</li>' +
+    '<li><strong>Yoga</strong> — Sun+Moon division. The harsh yogas (<em>Vishkambha, Ganda, Vaidhriti, Vyatipata</em>, etc.) are skipped.</li>' +
+    '<li><strong>Karana</strong> — half-tithi. Certain karanas are avoided for major starts.</li>' +
+    '</ul>' +
+    '<p>The panchaanga gives a <strong>coarse verdict</strong>. For real muhurtas (marriage, home-entry, travel, surgery), the book adds task-specific tables (Ch 36.4-36.9) and further checks — planet strength, lagna selection, transiting malefics — on top.</p>';
+
+  const good = d.tally.good, bad = d.tally.avoid, neu = d.tally.neutral;
+  const tone = bad >= 3
+      ? 'strongly <span class="text-rose-700 font-semibold">avoid</span> — three or more of five limbs flag this moment'
+    : bad > good
+      ? '<span class="text-amber-700 font-semibold">mixed / lean avoid</span> — more limbs flag than favour'
+    : good >= 3 && bad === 0
+      ? '<span class="text-emerald-700 font-semibold">favourable</span> — three or more limbs clean'
+      : '<span class="text-slate-700 font-semibold">neutral / ordinary</span> — neither strongly favoured nor flagged';
+
+  const trouble = d.limbs.filter(l => l.verdict === 'avoid').map(l => escapeHtml(l.label) + ' (' + escapeHtml(l.value) + ')');
+  const wins = d.limbs.filter(l => l.verdict === 'good').map(l => escapeHtml(l.label) + ' (' + escapeHtml(l.value) + ')');
+
+  readingEl.innerHTML =
+    '<div class="text-indigo-800 font-semibold mb-1">What this moment means</div>' +
+    '<p class="mb-1.5">Panchaanga verdict is <strong>' + tone + '</strong>.</p>' +
+    (wins.length   ? '<p class="mb-1.5 text-emerald-800">Working in your favour: ' + wins.join(', ') + '.</p>' : '') +
+    (trouble.length ? '<p class="mb-1.5 text-rose-800">Working against you: ' + trouble.join(', ') + '. Classical rule — shift the timing if possible.</p>' : '') +
+    '<p class="text-xs text-slate-600 italic">Remember: the 5-limb panchaanga is a <em>screening</em> test. For marriage, travel, surgery and other specific acts, Ch 36.4–36.9 layer further rules (nakshatra fitness for the task, lagna at the chosen moment, Moon avoiding the 6/8/12 from the natal Moon, etc.). If a critical act falls on a flagged day, a qualified muhurta astrologer can often find a usable sub-window.</p>';
+
+  citeEl.innerHTML =
+    'Sources — Ch 1.3.12 (Panchaanga intro), Ch 36.1 (Muhurta purpose), Ch 36.3 (tithi quality), Ch 36.4–36.9 (task-specific muhurta tables).';
 }
 
 // ---------- Quiz (Ch 1 practice) ----------
