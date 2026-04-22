@@ -280,7 +280,11 @@
           <h2 class="font-semibold text-slate-700">Vimshottari Mahadasha</h2>
           <span id="dashaSubject" class="text-xs text-slate-500"></span>
         </div>
-        <p id="dashaBalance" class="text-sm text-slate-600 mb-3"></p>
+        <p id="dashaBalance" class="text-sm text-slate-600 mb-1"></p>
+        <p class="text-xs text-slate-500 mb-3">
+          <em>Ripens</em> column (Ch 2.2.11): <span class="text-emerald-700">▲ 1st half</span> if lord sits in a <em>seershodaya</em> (head-rising) rasi ·
+          <span class="text-amber-700">▼ 2nd half</span> if <em>prishthodaya</em> (feet-rising) · <span class="text-indigo-700">↕ both</span> for Pisces.
+        </p>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead>
@@ -288,7 +292,8 @@
                 <th class="py-2 pr-3">#</th>
                 <th class="py-2 pr-3">Lord</th>
                 <th class="py-2 pr-3">Start</th>
-                <th class="py-2">Duration (years)</th>
+                <th class="py-2 pr-3">Duration (years)</th>
+                <th class="py-2" title="Ch 2.2.11 — rising mode of the lord's rasi decides which half of the dasa delivers results">Ripens</th>
               </tr>
             </thead>
             <tbody id="dashaBody" class="divide-y divide-slate-100"></tbody>
@@ -1175,9 +1180,25 @@ function fmtDur(years, level) {
 async function loadDasha() {
   const fd = ensureForm(); if (!fd) return;
   fd.set('level', '4');
-  const r = await fetch('/api/dasha', { method:'POST', body: fd });
-  if (!r.ok) { showErr('Dasha failed: '+r.status); return; }
-  const d = await r.json();
+  // Parallel: dasha periods + chart so we know where each mahadasa lord sits.
+  const fdChart = ensureForm();
+  const [rDasha, rChart] = await Promise.all([
+    fetch('/api/dasha', { method:'POST', body: fd }),
+    fetch('/api/chart', { method:'POST', body: fdChart })
+  ]);
+  if (!rDasha.ok) { showErr('Dasha failed: '+rDasha.status); return; }
+  const d = await rDasha.json();
+  const chart = rChart.ok ? await rChart.json() : { houses: [] };
+
+  // planet → rasi map from chart
+  const planetRasi = {};
+  (chart.houses || []).forEach(h => {
+    const signClean = _cleanRasiName(h.sign);
+    (h.planets || []).forEach(p => {
+      if (!p.is_asc) planetRasi[String(p.name || '').toLowerCase()] = signClean;
+    });
+  });
+
   document.getElementById('dashaSubject').textContent = subjectLine(fd);
   const b = d.balance;
   document.getElementById('dashaBalance').textContent =
@@ -1189,17 +1210,30 @@ async function loadDasha() {
     const mdRow = document.createElement('tr');
     mdRow.className = hasAD ? 'cursor-pointer hover:bg-slate-50' : '';
     const caret = hasAD ? '<span class="inline-block w-3 text-slate-400 caret">▶</span> ' : '<span class="inline-block w-3"></span> ';
+    const lordRasi = planetRasi[String(p.lord).toLowerCase()] || null;
+    const lordInfo = lordRasi ? RASI_INFO[lordRasi] : null;
+    let ripens = '<span class="text-slate-300" title="Lord not placed in a rasi we can read">—</span>';
+    if (lordInfo) {
+      if (lordInfo.rising === 'seershodaya') {
+        ripens = '<span class="text-emerald-700" title="'+p.lord+' in '+lordRasi+' (seershodaya) — Ch 2.2.11: results in FIRST half">▲ 1st half</span>';
+      } else if (lordInfo.rising === 'prishthodaya') {
+        ripens = '<span class="text-amber-700" title="'+p.lord+' in '+lordRasi+' (prishthodaya) — Ch 2.2.11: results in SECOND half">▼ 2nd half</span>';
+      } else {
+        ripens = '<span class="text-indigo-700" title="'+p.lord+' in Pisces — rises both ways, spread">↕ both</span>';
+      }
+    }
     mdRow.innerHTML =
       '<td class="py-2 pr-3 text-slate-400">'+(i+1)+'</td>'+
       '<td class="py-2 pr-3 font-medium text-slate-800">'+caret+p.lord+'</td>'+
       '<td class="py-2 pr-3 text-slate-600">'+p.start+'</td>'+
-      '<td class="py-2 text-slate-700">'+fmtDur(p.duration_years, 1)+'</td>';
+      '<td class="py-2 pr-3 text-slate-700">'+fmtDur(p.duration_years, 1)+'</td>'+
+      '<td class="py-2 text-xs">'+ripens+'</td>';
     tbody.appendChild(mdRow);
     if (hasAD) {
       const childRow = document.createElement('tr');
       childRow.className = 'hidden bg-slate-50';
       const td = document.createElement('td');
-      td.colSpan = 4;
+      td.colSpan = 5;
       td.className = 'py-2 pl-6 pr-3';
       let inner = '<div class="text-xs text-slate-500 mb-1">Antardasha (months) — click a row to see Pratyantardasha</div>'+
         '<table class="w-full text-xs"><thead><tr class="text-left text-slate-400 border-b">'+
