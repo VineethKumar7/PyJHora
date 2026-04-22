@@ -452,6 +452,12 @@
         <p class="text-xs text-slate-400 mt-3">
           Rate factors — Bhava 0.25°/min (1 rasi per 2h), Hora 0.5°/min, Ghati 1.25°/min. Computed from sunrise + Sun longitude.
         </p>
+        <details class="mt-5 border-t pt-3" open>
+          <summary class="font-semibold text-slate-700 cursor-pointer">About Houses &amp; References <span class="text-xs text-slate-400 font-normal">(from the book)</span></summary>
+          <div id="housesAbout" class="text-sm text-slate-600 space-y-2 mt-2"></div>
+        </details>
+        <div id="housesReading" class="mt-4 rounded border border-indigo-200 bg-indigo-50 p-4 text-sm"></div>
+        <div id="housesCitations" class="mt-2 text-xs text-slate-500 italic"></div>
       </div>
 
       <div id="horaOut" class="hidden bg-white rounded-lg shadow p-5">
@@ -1412,6 +1418,41 @@ async function loadHouses() {
     });
   });
   applyHighlight();
+  _renderHousesBook(d);
+}
+
+// Book-sourced explainer for the Houses tab. Covers what a house is, why the
+// reference matters (Ch 7.1), and gives a per-native table of the 12 house
+// significations (Ch 7.2) grounded in the chosen reference's meaning.
+function _renderHousesBook(d) {
+  const aboutEl = document.getElementById('housesAbout');
+  const readingEl = document.getElementById('housesReading');
+  const citeEl = document.getElementById('housesCitations');
+  if (!aboutEl || !readingEl || !citeEl) return;
+
+  aboutEl.innerHTML =
+    '<p>A <strong>house</strong> is a rasi <em>relative to a reference</em>. Whichever rasi contains the reference becomes the 1st house; the next is the 2nd, and so on around the zodiac to the 12th (Ch 7.1).</p>' +
+    '<p>Different references illuminate different things. <strong>Lagna</strong> (ascendant) is the default — it shows the body and overall life. <strong>Moon</strong> shows mental and emotional life. <strong>Sun</strong> shows ego and father. <strong>Arudha Lagna</strong> shows public image and material life. Counting houses from the right reference is how Parasari predictions stay specific (Ch 7.3).</p>' +
+    '<p>Each house carries a fixed set of matters (wealth, siblings, spouse, etc.) — the <em>signification</em> — listed below. A planet in the Nth house from a reference throws its themes onto those matters.</p>';
+
+  const rows = [];
+  for (let h = 1; h <= 12; h++) {
+    const info = HOUSE_INFO[h];
+    rows.push(
+      '<tr class="border-b border-slate-100">' +
+      '<td class="py-1.5 pr-3 text-slate-400 font-medium align-top">' + h + '</td>' +
+      '<td class="py-1.5 pr-3 text-slate-700 font-medium align-top whitespace-nowrap">' + escapeHtml(info.name) + '</td>' +
+      '<td class="py-1.5 text-slate-600 align-top">' + escapeHtml(info.themes) + '</td>' +
+      '</tr>'
+    );
+  }
+  readingEl.innerHTML =
+    '<div class="text-indigo-800 font-semibold mb-1">What each house means — for this native</div>' +
+    '<p class="mb-2 text-slate-700">Read every row <em>from the reference</em> you’ve highlighted above. So if the Moon chip is active, row 7 below describes your relationships, partner, and long journeys <strong>as seen from the Moon</strong> — i.e. how your emotional life engages with them.</p>' +
+    '<div class="overflow-x-auto"><table class="w-full text-xs"><tbody>' + rows.join('') + '</tbody></table></div>';
+
+  citeEl.innerHTML =
+    'Sources — Ch 1.3.3 (house definition), Ch 7.1 (houses &amp; references), Ch 7.2 (significations of the 12 houses), Ch 7.3 (common references).';
 }
 
 // Book-sourced explainer for the Lookup tab. Covers what a rasi, nakshatra,
